@@ -1,0 +1,2576 @@
+---
+title: "Gas_project"
+author: "Songjun"
+date: "2024-11-11"
+output: html_document
+---
+
+#load package
+```{r load backage} 
+library(tidyverse)
+library(gridExtra)
+library(ggplot2)
+library(reshape2)
+library(ggrepel)
+library(vegan)
+library(viridis)
+library(cowplot)
+library(phyloseq)
+library(SRS)
+library(ANCOMBC)
+library(ggpubr)
+library(zCompositions)
+library(readxl)
+
+
+#many different colours
+library(RColorBrewer)
+qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
+col_vector = unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
+
+```
+
+#load methane/sulfate data
+```{r}
+
+total_ch4<-read.csv("gas_methane.csv")
+
+total_SO4<-read.csv("gas_sulfate.csv")
+
+
+```
+
+#load 16S data & metadata
+#winter-bacteria
+```{r}
+
+metadata_winter_bacteria<- read.csv("metadata_1.csv", sep=";")
+#select the data belongs to this project
+metadata_winter_bacteria<-metadata_winter_bacteria[c(2:5,7:8,10:13,15:16,18:21,23:24,26:29,31:32,34:37,39:40),]
+metadata_winter_bacteria$Depth<-as.character(metadata_winter_bacteria$Depth)
+metadata_winter_bacteria$Depth<-factor(metadata_winter_bacteria$Depth,levels = c("0","1","8","15","22"))
+metadata_winter_bacteria$Time<-paste("winter")
+metadata_winter_bacteria[metadata_winter_bacteria=="warm"] <- "heated"
+metadata_winter_bacteria[metadata_winter_bacteria=="L"] <- "M"
+
+taxonomy_t_winter_bacteria<- read_tsv("ASV_tax_species.sbdi-gtdb.tsv")
+#replace NA to 'unidentified'
+taxonomy_t_winter_bacteria[is.na(taxonomy_t_winter_bacteria)]<-"unidentified"
+taxonomy_t_winter_bacteria%>% 
+  filter(Domain == "Bacteria")->taxonomy_t_winter_bacteria
+
+feature_table_t_winter_bacteria <- read_delim("ASV_table.tsv")
+#this plate is a mixed plate, take samples only belongs to this project
+feature_table_t_winter_bacteria<-feature_table_t_winter_bacteria[,c(1,3:6,8:9,11:14,16:17,19:22,24:25,27:30,32:33,35:38,40:41)]
+
+feature_table_t_winter_bacteria%>% 
+  filter(ASV_ID %in% taxonomy_t_winter_bacteria$ASV_ID)->feature_table_t_winter_bacteria
+
+```
+#winter-archaea
+```{r }
+metadata_winter_archaea<-read.csv("archaea_16S/metadata.csv", sep=",")
+metadata_winter_archaea$Depth<-as.character(metadata_winter_archaea$Depth)
+metadata_winter_archaea$Depth<-factor(metadata_winter_archaea$Depth,levels = c("0","1","8","15","22"))
+metadata_winter_archaea$Time<-paste("winter")
+metadata_winter_archaea[metadata_winter_archaea=="warm"] <- "heated"
+metadata_winter_archaea[metadata_winter_archaea=="L"] <- "M"
+
+
+taxonomy_t_winter_archaea<- read_tsv("archaea_16S/ASV_tax_species.sbdi-gtdb.tsv")
+#replace NA to 'unidentified'
+taxonomy_t_winter_archaea[is.na(taxonomy_t_winter_archaea)]<-"unidentified"
+taxonomy_t_winter_archaea%>% 
+  filter(Domain == "Archaea")->taxonomy_t_winter_archaea
+
+feature_table_t_winter_archaea <- read_tsv("archaea_16S/ASV_table.tsv")
+#pick out samples belong to this project 
+feature_table_t_winter_archaea<-feature_table_t_winter_archaea[,c(1,23:32,34:38,41:55)]
+
+feature_table_t_winter_archaea%>% 
+  filter(ASV_ID %in% taxonomy_t_winter_archaea$ASV_ID)->feature_table_t_winter_archaea
+
+```
+#summer-bacteria
+```{r}
+metadata_summer_bacteria<- read.csv("~/Desktop/Linnaeus University/OKG /T0 experiment analysis/16S_2021_august_sediment/metadata.csv", sep=";")
+#select the data belongs to this project
+metadata_summer_bacteria<-metadata_summer_bacteria[metadata_summer_bacteria$Site%in% c("B","C","F","M","J","I"),]
+metadata_summer_bacteria<-metadata_summer_bacteria[metadata_summer_bacteria$Depth%in% c(0,1,8,15,22),]
+
+metadata_summer_bacteria$Depth<-as.character(metadata_summer_bacteria$Depth)
+metadata_summer_bacteria$Depth<-factor(metadata_summer_bacteria$Depth,levels = c("0","1","8","15","22"))
+metadata_summer_bacteria$Time<-paste("summer")
+metadata_summer_bacteria[metadata_summer_bacteria=="warm"] <- "heated"
+
+taxonomy_t_summer_bacteria<- read_tsv("~/Desktop/Linnaeus University/OKG /T0 experiment analysis/16S_2021_august_sediment/ASV_tax_species.sbdi-gtdb.tsv")
+#replace NA to 'unidentified'
+taxonomy_t_summer_bacteria[is.na(taxonomy_t_summer_bacteria)]<-"unidentified"
+taxonomy_t_summer_bacteria%>% 
+  filter(Domain == "Bacteria")->taxonomy_t_summer_bacteria
+
+feature_table_t_summer_bacteria <- read_delim("~/Desktop/Linnaeus University/OKG /T0 experiment analysis/16S_2021_august_sediment/ASV_table.tsv")
+
+feature_table_t_summer_bacteria%>% 
+  filter(ASV_ID %in% taxonomy_t_summer_bacteria$ASV_ID)->feature_table_t_summer_bacteria
+#select the data belongs to this project
+feature_table_t_summer_bacteria<-feature_table_t_summer_bacteria[,c(1,2,5,7,15,16,17,18,21,23,31,32,33,35,37,39,47,48,49,50,52,55,61,62,63,64,66,68,74,75,76)]
+
+```
+#summer-archaea
+```{r}
+metadata_summer_archaea<- read.csv("~/Desktop/Linnaeus University/OKG /T0 experiment analysis/Archaea_16s_2021_august/metadata.csv", sep=",")
+#select the data belongs to this project
+metadata_summer_archaea<-metadata_summer_archaea[metadata_summer_archaea$Site%in% c("B","C","F","M","J","I"),]
+metadata_summer_archaea<-metadata_summer_archaea[metadata_summer_archaea$Depth%in% c(0,1,8,15,22),]
+
+metadata_summer_archaea$Depth<-as.character(metadata_summer_archaea$Depth)
+metadata_summer_archaea$Depth<-factor(metadata_summer_archaea$Depth,levels = c("0","1","8","15","22"))
+metadata_summer_archaea$Time<-paste("summer")
+metadata_summer_archaea[metadata_summer_archaea=="warm"] <- "heated"
+
+
+taxonomy_t_summer_archaea<- read_tsv("~/Desktop/Linnaeus University/OKG /T0 experiment analysis/Archaea_16s_2021_august/ASV_tax_species.sbdi-gtdb.tsv")
+#replace NA to 'unidentified'
+taxonomy_t_summer_archaea[is.na(taxonomy_t_summer_archaea)]<-"unidentified"
+taxonomy_t_summer_archaea%>% 
+  filter(Domain == "Archaea")->taxonomy_t_summer_archaea
+
+
+feature_table_t_summer_archaea <- read_delim("~/Desktop/Linnaeus University/OKG /T0 experiment analysis/Archaea_16s_2021_august/ASV_table.tsv")
+
+feature_table_t_summer_archaea%>% 
+  filter(ASV_ID %in% taxonomy_t_summer_archaea$ASV_ID)->feature_table_t_summer_archaea
+#select the data belongs to this project
+feature_table_t_summer_archaea<-feature_table_t_summer_archaea[,c(1,4,6,9,10,11,12,20,22,25,26,27,28,36,38,40,42,43,44,50,53,55,56,57,58,64,66,68,69,70,71)]
+
+```
+
+#data visuliazation for Figure 1
+```{r}
+
+#methane figure
+ch4_fig_bay<-ggplot(total_ch4, aes(x=Depth,y=`Methane.concentration..mM.`,shape=Site,colour=Season)) +
+  geom_line( )+
+  geom_point()+
+  coord_flip()+
+  scale_x_reverse(lim=c(33,0))+
+  scale_y_continuous(position = "right",limits = c(0,1))+
+  facet_grid(~Bay)+
+  scale_color_manual(values=c( "red","darkblue"))+
+  ylab("CH4 concentration (mM)")
+
+#ratio figure
+summer_divide_winter_ratio<-total_ch4[total_ch4$Depth==4,]%>%
+  group_by(Site)%>%
+  mutate(ratio=`Methane.concentration..mM.`[Season=="summer"]/`Methane.concentration..mM.`[Season=="winter"])
+summer_divide_winter_ratio<-summer_divide_winter_ratio[1:6,c(1,3,4,6)]
+summer_divide_winter_ratio$ratio<-round(summer_divide_winter_ratio$ratio,2)
+
+ratio_plot<-ggplot(data=summer_divide_winter_ratio, aes(x=Site, y=ratio,fill=Bay)) +
+  geom_bar(stat="identity")+
+  geom_text(aes(label=ratio), vjust=-0.3, size=3.5)+
+  scale_fill_manual(values=c( "blue","orange"))+
+  ylab("CH4 increased ratio (summer/winter)")
+
+#sulfate figure
+so4_fig_bay<-ggplot(total_SO4, aes(x=Depth,y=`Sulphate.mM.`,shape=Site,colour=Season)) +
+  geom_point()+
+  coord_flip()+
+  scale_x_reverse(lim=c(33,0))+
+  scale_y_continuous(position = "right",limits = c(0,13))+
+  facet_grid(~Bay)+
+  scale_color_manual(values=c( "red","darkblue"))+
+  ylab("SO4 concentration (mM)")
+
+#mix as figure1
+
+figure1<-ggarrange(ch4_fig_bay, 
+          ratio_plot,
+          so4_fig_bay,
+          nrow = 2, ncol = 2, labels = c("A", "B","C"),
+          font.label = list(size = 15, color = "black"))
+
+
+```
+
+#beta divesrity (pcoa) 
+#archaea comunity for Figure 2
+##put T summer and T winter together 
+```{r}
+
+## sample metadata
+samples_df <- rbind(metadata_summer_archaea,metadata_winter_archaea)
+
+
+
+## OTUs data
+otu_mat<- merge(feature_table_t_summer_archaea,feature_table_t_winter_archaea,by = "ASV_ID",
+                                   all = TRUE)
+#replace NA to 0
+otu_mat[is.na(otu_mat)]<-0
+
+### tax data 
+
+tax_mat<- merge(taxonomy_t_winter_archaea[,1:9],taxonomy_t_summer_archaea[,1:9],all = TRUE)
+#remove dupliacate
+Dup_tax<-tax_mat[duplicated(tax_mat$ASV_ID),]
+tax_mat<-tax_mat[-as.numeric(row.names.data.frame(Dup_tax)),]
+rownames(tax_mat)<-NULL
+
+
+### objects need to have row names 
+otu_mat <- otu_mat %>%
+    tibble::column_to_rownames("ASV_ID") 
+
+tax_mat <- tax_mat %>% 
+    tibble::column_to_rownames("ASV_ID")
+
+rownames(samples_df)<-NULL
+ samples_df <- samples_df %>% 
+    tibble::column_to_rownames("sample") 
+ 
+ ###convert tax and otu to matrices 
+otu_mat <- as.matrix(otu_mat)
+tax_mat <- as.matrix(tax_mat)
+
+## data is T_otu_mat
+#transpose otu matrix so that sites are rows and species are in columns
+T_otu_mat<-t(otu_mat)
+
+trans_otu_mat<-T_otu_mat
+
+trans_otu_mat<-data.frame(sample= row.names(trans_otu_mat), trans_otu_mat)
+
+```
+
+### compare pairwise dissimilarity, all sites, bray-curtis and jaccard
+```{r}
+repl_spoils.mdf<- T_otu_mat
+
+spoils.bray<- vegdist(repl_spoils.mdf, method = "bray")
+
+spoils.bray
+```
+
+###PCOA
+```{r}
+# calculate principal coordinates analysis (Bray-Curtis)
+pcoa.spoils.bray <- cmdscale(spoils.bray, k = 2, eig = T)
+
+# extract axis positions for each site from cmdscale object and create a dataframe for plotting
+pcoa.spoils.bray.plotting <- as.data.frame(pcoa.spoils.bray$points)
+colnames(pcoa.spoils.bray.plotting) <- c("axis_1", "axis_2")
+
+pcoa.spoils.bray.plotting<-cbind(pcoa.spoils.bray.plotting, samples_df)
+
+
+# calculate the proportion of variance in the data which is explained by the first two PCoA axes
+pcoa.spoils.bray$eig[1]/(sum(pcoa.spoils.bray$eig))
+# resulting value is the Xlab 
+
+```
+
+```{r}
+pcoa.spoils.bray$eig[2]/(sum(pcoa.spoils.bray$eig))
+#resulting value is the ylab 
+```
+
+#pcoa plot figure2
+```{r}
+# create a PCoA plot
+
+#control bay
+pcoa.spoils.bray.plot_archaea_control <- ggplot(pcoa.spoils.bray.plotting[pcoa.spoils.bray.plotting$Bay=="control",], aes(x = axis_1, y = axis_2)) +
+  geom_point(aes(colour =Time , shape=Depth), size= 3.5) +
+  scale_color_manual(values=c( "red","darkblue"))+
+  theme_bw() + 
+  theme(text = element_text(size = 13)) +
+  xlim(-0.5,0.5)+
+  ylim(-0.5,0.5)+
+  xlab("PC 1 (26.88%)") + 
+  ylab("PC 2 (17.33%)")+
+  ggtitle("Control bay")
+
+pcoa.spoils.bray.plot_archaea_control
+
+#heated bay
+pcoa.spoils.bray.plot_archaea_heated <- ggplot(pcoa.spoils.bray.plotting[pcoa.spoils.bray.plotting$Bay=="heated",], aes(x = axis_1, y = axis_2)) +
+  geom_point(aes(colour =Time , shape=Depth), size= 3.5) +
+  scale_color_manual(values=c( "red","darkblue"))+
+  theme_bw() + 
+  theme(text = element_text(size = 13)) +
+  xlim(-0.5,0.5)+
+  ylim(-0.5,0.5)+
+  xlab("PC 1 (26.88%)") + 
+  ylab("PC 2 (17.33%)")+
+  ggtitle("Heated bay")
+
+pcoa.spoils.bray.plot_archaea_heated
+
+#summer
+pcoa.spoils.bray.plot_archaea_summer <- ggplot(pcoa.spoils.bray.plotting[pcoa.spoils.bray.plotting$Time=="summer",], aes(x = axis_1, y = axis_2)) +
+  geom_point(aes(colour =Bay , shape=Depth), size= 3.5) +
+  scale_color_manual(values=c( "blue","orange"))+
+  theme_bw() + 
+  theme(text = element_text(size = 13)) +
+  xlim(-0.5,0.5)+
+  ylim(-0.5,0.5)+
+ xlab("PC 1 (26.88%)") + 
+  ylab("PC 2 (17.33%)")+
+  ggtitle("Summer")
+
+pcoa.spoils.bray.plot_archaea_summer
+
+
+#winter
+pcoa.spoils.bray.plot_archaea_winter <- ggplot(pcoa.spoils.bray.plotting[pcoa.spoils.bray.plotting$Time=="winter",], aes(x = axis_1, y = axis_2)) +
+  geom_point(aes(colour =Bay , shape=Depth), size= 3.5) +
+  scale_color_manual(values=c( "blue","orange"))+
+  theme_bw() + 
+  theme(text = element_text(size = 13)) +
+  xlim(-0.5,0.5)+
+  ylim(-0.5,0.5)+
+  xlab("PC 1 (26.88%)") + 
+  ylab("PC 2 (17.33%)")+
+  ggtitle("Winter")
+
+pcoa.spoils.bray.plot_archaea_winter
+
+
+
+part1<- ggarrange(pcoa.spoils.bray.plot_archaea_control,
+                    pcoa.spoils.bray.plot_archaea_heated,
+                    labels = c("A", "B"),
+                    font.label = list(size = 28),
+                    common.legend = TRUE, legend = "right",
+                    ncol=2, nrow=1)
+
+part2<-ggarrange(pcoa.spoils.bray.plot_archaea_summer,
+                    pcoa.spoils.bray.plot_archaea_winter, 
+                    labels = c("C","D"),
+                   font.label = list(size = 28),
+                   common.legend = TRUE, legend = "right",
+                    ncol=2, nrow=1)
+figure2<-ggarrange(part1,part2,
+          ncol=1, nrow=2)
+
+figure2
+
+```
+
+#following PERMANOVA for the pairsie distance matrix
+```{r}
+
+#make depth into continues numeric factor then make model
+str(samples_df)
+samples_df_depth_numeric<-samples_df
+samples_df_depth_numeric$Depth<-as.numeric(samples_df_depth_numeric$Depth)
+str(samples_df_depth_numeric)
+
+adonis2(spoils.bray~Time*Bay*Depth+Site, data = samples_df_depth_numeric)
+
+```
+
+
+
+#bacteria comunity for figure3
+##put T summer and T winter together 
+```{r}
+
+## sample metadata
+samples_df <- rbind(metadata_summer_bacteria,metadata_winter_bacteria)
+
+
+
+## OTUs data
+otu_mat<- merge(feature_table_t_summer_bacteria,feature_table_t_winter_bacteria,by = "ASV_ID",
+                                   all = TRUE)
+#replace NA to 0
+otu_mat[is.na(otu_mat)]<-0
+
+### tax data 
+
+tax_mat<- merge(taxonomy_t_winter_bacteria[,1:9],taxonomy_t_summer_bacteria[,1:9],all = TRUE)
+#remove dupliacate
+Dup_tax<-tax_mat[duplicated(tax_mat$ASV_ID),]
+tax_mat<-tax_mat[-as.numeric(row.names.data.frame(Dup_tax)),]
+rownames(tax_mat)<-NULL
+
+
+### objects need to have row names 
+otu_mat <- otu_mat %>%
+    tibble::column_to_rownames("ASV_ID") 
+
+tax_mat <- tax_mat %>% 
+    tibble::column_to_rownames("ASV_ID")
+
+rownames(samples_df)<-NULL
+ samples_df <- samples_df %>% 
+    tibble::column_to_rownames("sample") 
+ 
+ ###convert tax and otu to matrices 
+otu_mat <- as.matrix(otu_mat)
+tax_mat <- as.matrix(tax_mat)
+
+## data is T_otu_mat
+#transpose otu matrix so that sites are rows and species are in columns
+T_otu_mat<-t(otu_mat)
+
+trans_otu_mat<-T_otu_mat
+
+trans_otu_mat<-data.frame(sample= row.names(trans_otu_mat), trans_otu_mat)
+
+```
+
+### compare pairwise dissimilarity, all sites, bray-curtis and jaccard
+```{r}
+repl_spoils.mdf<- T_otu_mat
+
+spoils.bray<- vegdist(repl_spoils.mdf, method = "bray")
+
+spoils.bray
+```
+
+###PCOA
+```{r}
+# calculate principal coordinates analysis (Bray-Curtis)
+pcoa.spoils.bray <- cmdscale(spoils.bray, k = 2, eig = T)
+
+# extract axis positions for each site from cmdscale object and create a dataframe for plotting
+pcoa.spoils.bray.plotting <- as.data.frame(pcoa.spoils.bray$points)
+colnames(pcoa.spoils.bray.plotting) <- c("axis_1", "axis_2")
+#pcoa.spoils.bray.plotting$site <- rownames(pcoa.spoils.bray.plotting)
+#pcoa.spoils.bray.plotting$bay <- rownames(pcoa.spoils.bray.plotting)
+#pcoa.spoils.bray.plotting$depth <- rownames(pcoa.spoils.bray.plotting)
+
+pcoa.spoils.bray.plotting<-cbind(pcoa.spoils.bray.plotting, samples_df)
+
+
+# calculate the proportion of variance in the data which is explained by the first two PCoA axes
+pcoa.spoils.bray$eig[1]/(sum(pcoa.spoils.bray$eig))
+# resulting value is the Xlab 
+
+```
+
+```{r}
+pcoa.spoils.bray$eig[2]/(sum(pcoa.spoils.bray$eig))
+#resulting value is the ylab 
+```
+
+#pcoa plot figure3
+```{r}
+# create a PCoA plot
+
+#control bay
+pcoa.spoils.bray.plot_bacteria_control <- ggplot(pcoa.spoils.bray.plotting[pcoa.spoils.bray.plotting$Bay=="control",], aes(x = axis_1, y = axis_2)) +
+  geom_point(aes(colour =Time , shape=Depth), size= 3.5) +
+  scale_color_manual(values=c( "red","darkblue"))+
+  theme_bw() + 
+  theme(text = element_text(size = 13)) +
+   xlim(-0.6,0.6)+
+  ylim(-0.6,0.6)+
+  xlab("PC 1 (26.88%)") + 
+  ylab("PC 2 (17.33%)")+
+  ggtitle("Control bay")
+
+pcoa.spoils.bray.plot_bacteria_control
+
+
+#heated bay
+pcoa.spoils.bray.plot_bacteria_heated <- ggplot(pcoa.spoils.bray.plotting[pcoa.spoils.bray.plotting$Bay=="heated",], aes(x = axis_1, y = axis_2)) +
+  geom_point(aes(colour =Time , shape=Depth), size= 3.5) +
+  scale_color_manual(values=c( "red","darkblue"))+
+  theme_bw() + 
+  theme(text = element_text(size = 13)) +
+  xlim(-0.6,0.6)+
+  ylim(-0.6,0.6)+
+  xlab("PC 1 (26.88%)") + 
+  ylab("PC 2 (17.33%)")+
+  ggtitle("Heated bay")
+
+pcoa.spoils.bray.plot_bacteria_heated
+
+
+#summer
+pcoa.spoils.bray.plot_bacteria_summer <- ggplot(pcoa.spoils.bray.plotting[pcoa.spoils.bray.plotting$Time=="summer",], aes(x = axis_1, y = axis_2)) +
+  geom_point(aes(colour =Bay , shape=Depth), size= 3.5) +
+  scale_color_manual(values=c( "blue","orange"))+
+  theme_bw() + 
+  theme(text = element_text(size = 13)) +
+   xlim(-0.6,0.6)+
+  ylim(-0.6,0.6)+
+ xlab("PC 1 (26.88%)") + 
+  ylab("PC 2 (17.33%)")+
+  ggtitle("Summer")
+
+pcoa.spoils.bray.plot_bacteria_summer
+
+
+#winter
+pcoa.spoils.bray.plot_bacteria_winter <- ggplot(pcoa.spoils.bray.plotting[pcoa.spoils.bray.plotting$Time=="winter",], aes(x = axis_1, y = axis_2)) +
+  geom_point(aes(colour =Bay , shape=Depth), size= 3.5) +
+  scale_color_manual(values=c( "blue","orange"))+
+  theme_bw() + 
+  theme(text = element_text(size = 13)) +
+   xlim(-0.6,0.6)+
+  ylim(-0.6,0.6)+
+  xlab("PC 1 (26.88%)") + 
+  ylab("PC 2 (17.33%)")+
+  ggtitle("Winter")
+
+pcoa.spoils.bray.plot_bacteria_winter
+
+part1 <- ggarrange(pcoa.spoils.bray.plot_bacteria_control,
+                    pcoa.spoils.bray.plot_bacteria_heated,
+                    labels = c("A", "B"),
+                    font.label = list(size = 28),
+                    common.legend = TRUE, legend = "right",
+                    ncol=2, nrow=1)
+
+part2<-ggarrange(pcoa.spoils.bray.plot_bacteria_summer,
+                    pcoa.spoils.bray.plot_bacteria_winter, 
+                    labels = c("C","D"),
+                   font.label = list(size = 28),
+                   common.legend = TRUE, legend = "right",
+                    ncol=2, nrow=1)
+figure3<-ggarrange(part1,part2,
+          ncol=1, nrow=2)
+
+figure3
+
+
+```
+
+#following PERMANOVA for the pairsie distance matrix
+```{r}
+
+#make depth into continues numeric factor then make model
+str(samples_df)
+samples_df_depth_numeric<-samples_df
+samples_df_depth_numeric$Depth<-as.numeric(samples_df_depth_numeric$Depth)
+str(samples_df_depth_numeric)
+
+adonis2(spoils.bray~Time*Bay*Depth+Site, data = samples_df_depth_numeric)
+
+```
+
+#geneerate asv_table
+```{r}
+
+#summer archaea
+
+asvs_summer_archaea<-feature_table_t_summer_archaea%>%
+  gather(sample, count, 2:ncol(.)) %>% 
+  filter(count > 0) %>%
+  group_by(sample) %>% 
+  mutate(relab = count/sum(count)) %>% 
+  ungroup()
+
+
+#winter archaea
+asvs_winter_archaea<-feature_table_t_winter_archaea%>%
+  gather(sample, count, 2:ncol(.)) %>% 
+  filter(count > 0) %>%
+  group_by(sample) %>% 
+  mutate(relab = count/sum(count)) %>% 
+  ungroup()
+
+#summer bacteria
+asvs_summer_bacteria<-feature_table_t_summer_bacteria%>%
+  gather(sample, count, 2:ncol(.)) %>% 
+  filter(count > 0) %>%
+  group_by(sample) %>% 
+  mutate(relab = count/sum(count)) %>% 
+  ungroup()
+
+#winter bacteria
+asvs_winter_bacteria<-feature_table_t_winter_bacteria%>%
+  gather(sample, count, 2:ncol(.)) %>% 
+  filter(count > 0) %>%
+  group_by(sample) %>% 
+  mutate(relab = count/sum(count)) %>% 
+  ungroup()
+
+```
+
+#rarefaction curve Supplemental Figure S3 
+#rarefaction curve
+```{r}
+
+
+#rare_curve_winter_archaea
+asvs_winter_archaea%>%
+ dplyr::select(ASV_ID, sample, count) %>%
+  spread(ASV_ID, count, fill = 0) %>%
+  column_to_rownames("sample")%>%
+rarecurve(sample= 100, step = 100, xlab = "Sequencing Depth", ylab = "# of ASVs",cex=0.4)
+
+#rare_curve_winter_bacteria
+asvs_winter_bacteria%>%
+ dplyr::select(ASV_ID, sample, count) %>%
+  spread(ASV_ID, count, fill = 0) %>%
+  column_to_rownames("sample")%>%
+rarecurve(sample= 100, step = 100, xlab = "Sequencing Depth", ylab = "# of ASVs",cex=0.4)
+
+#rare_curve_summer_archaea
+asvs_summer_archaea%>%
+ dplyr::select(ASV_ID, sample, count) %>%
+  spread(ASV_ID, count, fill = 0) %>%
+  column_to_rownames("sample")%>%
+rarecurve(sample= 100, step = 100, xlab = "Sequencing Depth", ylab = "# of ASVs",cex=0.4)
+
+#rare_curve_summer_bacteria
+asvs_summer_bacteria%>%
+ dplyr::select(ASV_ID, sample, count) %>%
+  spread(ASV_ID, count, fill = 0) %>%
+  column_to_rownames("sample")%>%
+rarecurve(sample= 100, step = 100, xlab = "Sequencing Depth", ylab = "# of ASVs",cex=0.4)
+
+```
+
+#relatieve abundance plot Figure 4 (family level)
+```{r}
+# winter archaea Family plot
+p <- asvs_winter_archaea %>%
+  inner_join(taxonomy_t_winter_archaea, by = 'ASV_ID') %>%
+  filter(Kingdom == "Archaea")%>%
+  group_by(Family, sample) %>%
+  # Calculate the relative abundance of each phylum in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each phylum over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned phylum
+  filter(!is.na(Family))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+#depth
+depth_Family_winter_archaea<-asvs_winter_archaea[,-4]%>% 
+  filter(count > 0)%>%
+  # Add metadata
+ inner_join(metadata_winter_archaea, by = 'sample')%>%
+  inner_join(taxonomy_t_winter_archaea, by = 'ASV_ID')%>%
+  group_by(Bay, Depth)%>%
+  # Calculate the relative abundance of each phylum in each site
+  mutate(relab = count/sum(count))%>%
+  ungroup()%>% 
+  left_join(
+    p %>% 
+      transmute(Family, top_15_Family = Family),
+    by = 'Family'
+  ) %>%
+  replace_na(list('top_15_Family' = 'Other_Families'))
+
+ra_plot_table<-depth_Family_winter_archaea%>%
+  group_by(Bay, Depth,top_15_Family)%>%
+  summarise(relab=sum(relab))
+
+ra_plot_table$Bay[ra_plot_table$Bay=="control"]<-"Control winter archaea"
+ra_plot_table$Bay[ra_plot_table$Bay=="heated"]<-"Heated winter archaea"
+  
+ra_plot<-ggplot(ra_plot_table,aes(x=Depth, y=relab, fill=top_15_Family)) +
+facet_grid(~Bay)+
+geom_col() +
+theme_bw() +
+scale_fill_manual(values = col_vector)+
+scale_x_discrete(limits=rev)+
+coord_flip()+
+labs(x="Sediment depth (cm)", y=element_blank())+
+  theme(legend.position="bottom",
+    legend.key.size = unit(0.5, 'cm'), 
+        legend.key.height = unit(0.5, 'cm'), 
+        legend.key.width = unit(0.7, 'cm'), 
+        legend.title = element_blank(), 
+        legend.text = element_text(size=10),
+    axis.ticks.x = element_line(),  
+        axis.text.x = element_blank()) 
+
+ra_winter_archaea<-ra_plot
+
+# winter bacteria Family plot
+p <- asvs_winter_bacteria %>%
+  inner_join(taxonomy_t_winter_bacteria, by = 'ASV_ID') %>%
+  filter(Kingdom == "Bacteria")%>%
+  group_by(Family, sample) %>%
+  # Calculate the relative abundance of each Family in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each Family over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned Family
+  filter(!is.na(Family))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+#depth
+depth_Family_winter_bacteria<-asvs_winter_bacteria[,-4]%>% 
+  filter(count > 0)%>%
+  # Add metadata
+ inner_join(metadata_winter_bacteria, by = 'sample')%>%
+  inner_join(taxonomy_t_winter_bacteria, by = 'ASV_ID')%>%
+  group_by(Bay, Depth)%>%
+  # Calculate the relative abundance of each Family in each site
+  mutate(relab = count/sum(count))%>%
+  ungroup()%>% 
+  left_join(
+    p %>% 
+      transmute(Family, top_15_Family = Family),
+    by = 'Family'
+  ) %>%
+  replace_na(list('top_15_Family' = 'Other_Family'))
+
+ra_plot_table<-depth_Family_winter_bacteria%>%
+  group_by(Bay, Depth,top_15_Family)%>%
+  summarise(relab=sum(relab))
+
+ra_plot_table$Bay[ra_plot_table$Bay=="control"]<-"Control winter bacteria"
+ra_plot_table$Bay[ra_plot_table$Bay=="heated"]<-"Heated winter bacteria"
+  
+ra_plot<-ggplot(ra_plot_table,aes(x=Depth, y=relab, fill=top_15_Family)) +
+facet_grid(~Bay)+
+geom_col() +
+theme_bw() +
+scale_fill_manual(values = col_vector)+
+scale_x_discrete(limits=rev)+
+coord_flip()+
+labs(x="Sediment depth (cm)", y=element_blank())+
+  theme(legend.position="bottom",
+    legend.key.size = unit(0.5, 'cm'), 
+        legend.key.height = unit(0.5, 'cm'), 
+        legend.key.width = unit(0.7, 'cm'), 
+        legend.title = element_blank(), 
+        legend.text = element_text(size=10),
+    axis.ticks.x = element_line(),  
+        axis.text.x = element_blank()) 
+
+ra_winter_bacteria<-ra_plot
+
+# summer archaea family plot
+p <- asvs_summer_archaea %>%
+  inner_join(taxonomy_t_summer_archaea, by = 'ASV_ID') %>%
+  filter(Kingdom == "Archaea")%>%
+  group_by(Family, sample) %>%
+  # Calculate the relative abundance of each phylum in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each phylum over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned phylum
+  filter(!is.na(Family))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+#depth
+depth_family_summer_archaea<-asvs_summer_archaea[,-4]%>% 
+  filter(count > 0)%>%
+  # Add metadata
+ inner_join(metadata_summer_archaea, by = 'sample')%>%
+  inner_join(taxonomy_t_summer_archaea, by = 'ASV_ID')%>%
+  group_by(Bay, Depth)%>%
+  # Calculate the relative abundance of each phylum in each site
+  mutate(relab = count/sum(count))%>%
+  ungroup()%>% 
+  left_join(
+    p %>% 
+      transmute(Family, top_15_Family = Family),
+    by = 'Family'
+  ) %>%
+  replace_na(list('top_15_Family' = 'Other_Families'))
+
+
+ra_plot_table<-depth_family_summer_archaea%>%
+  group_by(Bay, Depth,top_15_Family)%>%
+  summarise(relab=sum(relab))
+
+ra_plot_table$Bay[ra_plot_table$Bay=="control"]<-"Control summer archaea"
+ra_plot_table$Bay[ra_plot_table$Bay=="heated"]<-"Heated summer archaea"
+  
+ra_plot<-ggplot(ra_plot_table,aes(x=Depth, y=relab, fill=top_15_Family)) +
+facet_grid(~Bay)+
+geom_col() +
+theme_bw() +
+scale_fill_manual(values = col_vector)+
+scale_x_discrete(limits=rev)+
+coord_flip()+
+labs(x="Sediment depth (cm)", y=element_blank())+
+  theme(legend.position="bottom",
+    legend.key.size = unit(0.5, 'cm'), 
+        legend.key.height = unit(0.5, 'cm'), 
+        legend.key.width = unit(0.7, 'cm'), 
+        legend.title = element_blank(), 
+        legend.text = element_text(size=10),
+    axis.ticks.x = element_line(),  
+        axis.text.x = element_blank()) 
+
+ra_summer_archaea<-ra_plot
+
+# summer bacteria Family plot
+p <- asvs_summer_bacteria %>%
+  inner_join(taxonomy_t_summer_bacteria, by = 'ASV_ID') %>%
+  filter(Kingdom == "Bacteria")%>%
+  group_by(Family, sample) %>%
+  # Calculate the relative abundance of each Family in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each Family over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned Family
+  filter(!is.na(Family))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+#depth
+depth_Family_summer_bacteria<-asvs_summer_bacteria[,-4]%>% 
+  filter(count > 0)%>%
+  # Add metadata
+ inner_join(metadata_summer_bacteria, by = 'sample')%>%
+  inner_join(taxonomy_t_summer_bacteria, by = 'ASV_ID')%>%
+  group_by(Bay, Depth)%>%
+  # Calculate the relative abundance of each Family in each site
+  mutate(relab = count/sum(count))%>%
+  ungroup()%>% 
+  left_join(
+    p %>% 
+      transmute(Family, top_15_Family = Family),
+    by = 'Family'
+  ) %>%
+  replace_na(list('top_15_Family' = 'Other_Families'))
+
+
+ra_plot_table<-depth_Family_summer_bacteria%>%
+  group_by(Bay, Depth,top_15_Family)%>%
+  summarise(relab=sum(relab))
+
+ra_plot_table$Bay[ra_plot_table$Bay=="control"]<-"Control summer bacteria"
+ra_plot_table$Bay[ra_plot_table$Bay=="heated"]<-"Heated summer bacteria"
+
+  
+ra_plot<-ggplot(ra_plot_table,aes(x=Depth, y=relab, fill=top_15_Family)) +
+facet_grid(~Bay)+
+scale_fill_manual(values = col_vector)+
+geom_col() +
+theme_bw() +
+scale_x_discrete(limits=rev)+
+coord_flip()+
+labs(x="Sediment depth (cm)", y="Relative_abundance")+
+  theme(legend.position="bottom",
+    legend.key.size = unit(0.5, 'cm'), 
+        legend.key.height = unit(0.5, 'cm'), 
+        legend.key.width = unit(0.7, 'cm'), 
+        legend.title = element_blank(), 
+        legend.text = element_text(size=10)) 
+
+
+ra_summer_bacteria<-ra_plot
+
+#mix together
+figure4<-ggarrange(ra_winter_archaea, 
+          ra_winter_bacteria,
+          ra_summer_archaea,
+          ra_summer_bacteria,
+          nrow = 4, ncol = 1
+          )
+
+
+```
+
+#Differential abundance analysis at family level (ANCOMBC2)
+#sepereated for archaea/bacteria and summer/winter
+#archaea_summer (family)
+```{r}
+
+asvs_wide_summer_archaea<-asvs_summer_archaea %>% 
+  dplyr::select(ASV_ID,sample, count) %>% 
+  spread(sample,count, fill= 0) %>% 
+  remove_rownames() %>% 
+  column_to_rownames(var = "ASV_ID")
+
+OTU= otu_table(asvs_wide_summer_archaea, taxa_are_rows = TRUE)
+
+
+asvs_tax_df<-as.data.frame(taxonomy_t_summer_archaea[,1:10])
+rownames(asvs_tax_df)<-NULL
+TAX = tax_table(as.matrix(asvs_tax_df %>% column_to_rownames(., var="ASV_ID")))
+rownames(metadata_summer_archaea)<-NULL
+SAM = sample_data(metadata_summer_archaea%>% column_to_rownames(var="sample"))
+
+ps <- phyloseq(OTU, TAX, SAM)
+
+ps@sam_data[["group"]] <- paste(ps@sam_data[["Bay"]], ps@sam_data[["Depth"]], sep="_")
+ps@sam_data[["group"]]
+
+#family level
+
+ancombc2_family_archaea_summer<-ancombc2(data = ps, tax_level = "Family", fix_formula = "group", group="group", rand_formula=NULL, p_adj_method = "holm", n_cl = 4, prv_cut = 0.10, struc_zero=TRUE, neg_lb=TRUE, global=TRUE, pairwise=TRUE, dunnet=TRUE)
+
+pairwise<-ancombc2_family_archaea_summer$res_pair
+
+
+#select only top 15 with lfc/p values
+p <- asvs_summer_archaea %>%
+  inner_join(taxonomy_t_summer_archaea, by = 'ASV_ID') %>%
+  filter(Kingdom == "Archaea")%>%
+  group_by(Family, sample) %>%
+  # Calculate the relative abundance of each phylum in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each phylum over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned phylum
+  filter(!is.na(Family))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+
+top_15_summer_archaea<-p$Family
+
+top15_summer_archaea_pairwise_family<-pairwise[,c("taxon","lfc_groupheated_0","p_groupheated_0","q_groupheated_0",
+                                            "lfc_groupheated_1_groupcontrol_1","p_groupheated_1_groupcontrol_1","q_groupheated_1_groupcontrol_1",
+                                          "lfc_groupheated_8_groupcontrol_8","p_groupheated_8_groupcontrol_8","q_groupheated_8_groupcontrol_8",
+                                          "lfc_groupheated_15_groupcontrol_15","p_groupheated_15_groupcontrol_15","q_groupheated_15_groupcontrol_15",
+                                          "lfc_groupheated_22_groupcontrol_22","p_groupheated_22_groupcontrol_22","q_groupheated_22_groupcontrol_22")]
+
+colnames(top15_summer_archaea_pairwise_family)[1]<-"Family"
+top15_summer_archaea_pairwise_family<- top15_summer_archaea_pairwise_family%>% filter(Family %in% top_15_summer_archaea)
+
+top15_summer_archaea_pairwise_family<-top15_summer_archaea_pairwise_family%>%
+  mutate(across(where(is.numeric), ~ round(., 3)))
+
+
+
+```
+#heatmap summer archaea
+```{r}
+
+#make heatmap
+summer_archaea_pairwise_family_lfc<-summer_archaea_pairwise_family[,c(1,2,5,8,11,14)]
+
+p <- asvs_summer_archaea %>%
+  inner_join(taxonomy_t_summer_archaea, by = 'ASV_ID') %>%
+  filter(Kingdom == "Archaea")%>%
+  group_by(Family, sample) %>%
+  # Calculate the relative abundance of each phylum in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each phylum over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned phylum
+  filter(!is.na(Family))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+summer_archaea_pairwise_family_long<-
+  summer_archaea_pairwise_family_lfc%>%
+  left_join(
+    p%>%
+      transmute(Family, top_15_Family=Family),
+    by="Family"
+  )%>%
+  replace_na(list("top_15_Family"="Other_Families"))%>%
+  pivot_longer(!c(Family, top_15_Family), names_to = "group", values_to = "lfc_value")
+
+#change group name
+summer_archaea_pairwise_family_long$group[summer_archaea_pairwise_family_long$group == 'lfc_groupheated_0'] <- '0 cm'
+summer_archaea_pairwise_family_long$group[summer_archaea_pairwise_family_long$group == 'lfc_groupheated_1_groupcontrol_1'] <- '1 cm'
+summer_archaea_pairwise_family_long$group[summer_archaea_pairwise_family_long$group == 'lfc_groupheated_8_groupcontrol_8'] <- '8 cm'
+summer_archaea_pairwise_family_long$group[summer_archaea_pairwise_family_long$group == 'lfc_groupheated_15_groupcontrol_15'] <- '15 cm'
+summer_archaea_pairwise_family_long$group[summer_archaea_pairwise_family_long$group == 'lfc_groupheated_22_groupcontrol_22'] <- '22 cm'
+
+#organize order
+summer_archaea_pairwise_family_long$group<- factor(summer_archaea_pairwise_family_long$group,levels=c("0 cm","1 cm","8 cm","15 cm","22 cm"))
+
+#make plot
+heatmap_archaea_summer<-summer_archaea_pairwise_family_long%>%
+  ggplot(aes(x = top_15_Family, y = group, fill = lfc_value)) +
+  geom_tile(color = "black") +
+  scale_fill_gradient2(low = "blue", high = "orange", mid = "white",
+                       na.value = "white", midpoint = 0, limit = c(-6,6),
+                       name = NULL) +
+  labs(x = NULL, y = NULL)+
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))+ggtitle(" Archaea control bay compared to heated bay in summer")+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+scale_y_discrete(limits = rev)
+
+
+```
+#archaea_winter (family)
+```{r}
+
+asvs_wide_winter_archaea<-asvs_winter_archaea %>% 
+  dplyr::select(ASV_ID,sample, count) %>% 
+  spread(sample,count, fill= 0) %>% 
+  remove_rownames() %>% 
+  column_to_rownames(var = "ASV_ID")
+
+OTU= otu_table(asvs_wide_winter_archaea, taxa_are_rows = TRUE)
+
+
+asvs_tax_df<-as.data.frame(taxonomy_t_winter_archaea[,1:10])
+rownames(asvs_tax_df)<-NULL
+TAX = tax_table(as.matrix(asvs_tax_df %>% column_to_rownames(., var="ASV_ID")))
+rownames(metadata_winter_archaea)<-NULL
+SAM = sample_data(metadata_winter_archaea%>% column_to_rownames(var="sample"))
+
+ps <- phyloseq(OTU, TAX, SAM)
+
+ps@sam_data[["group"]] <- paste(ps@sam_data[["Bay"]], ps@sam_data[["Depth"]], sep="_")
+ps@sam_data[["group"]]
+
+#family level
+
+ancombc2_family_archaea_winter<-ancombc2(data = ps, tax_level = "Family", fix_formula = "group", group="group", rand_formula=NULL, p_adj_method = "holm", n_cl = 4, prv_cut = 0.10, struc_zero=TRUE, neg_lb=TRUE, global=TRUE, pairwise=TRUE, dunnet=TRUE)
+
+pairwise<-ancombc2_family_archaea_winter$res_pair
+
+#select top 15 families
+p <- asvs_winter_archaea %>%
+  inner_join(taxonomy_t_winter_archaea, by = 'ASV_ID') %>%
+  filter(Kingdom == "Archaea")%>%
+  group_by(Family, sample) %>%
+  # Calculate the relative abundance of each phylum in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each phylum over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned phylum
+  filter(!is.na(Family))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+top_15_winter_archaea<-p$Family
+
+top15_winter_archaea_pairwise_family<-pairwise[,c("taxon","lfc_groupheated_0","p_groupheated_0","q_groupheated_0",
+                                            "lfc_groupheated_1_groupcontrol_1","p_groupheated_1_groupcontrol_1","q_groupheated_1_groupcontrol_1",
+                                          "lfc_groupheated_8_groupcontrol_8","p_groupheated_8_groupcontrol_8","q_groupheated_8_groupcontrol_8",
+                                          "lfc_groupheated_15_groupcontrol_15","p_groupheated_15_groupcontrol_15","q_groupheated_15_groupcontrol_15",
+                                          "lfc_groupheated_22_groupcontrol_22","p_groupheated_22_groupcontrol_22","q_groupheated_22_groupcontrol_22")]
+
+colnames(top15_winter_archaea_pairwise_family)[1]<-"Family"
+
+top15_winter_archaea_pairwise_family<- top15_winter_archaea_pairwise_family%>% filter(Family %in% top_15_winter_archaea)
+
+top15_winter_archaea_pairwise_family<-top15_winter_archaea_pairwise_family%>%
+  mutate(across(where(is.numeric), ~ round(., 3)))
+
+
+```
+#heatmap winter archaea
+```{r}
+
+#make heatmap
+winter_archaea_pairwise_family_lfc<-winter_archaea_pairwise_family[,c(1,2,5,8,11,14)]
+
+p <- asvs_winter_archaea %>%
+  inner_join(taxonomy_t_winter_archaea, by = 'ASV_ID') %>%
+  filter(Kingdom == "Archaea")%>%
+  group_by(Family, sample) %>%
+  # Calculate the relative abundance of each phylum in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each phylum over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned phylum
+  filter(!is.na(Family))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+winter_archaea_pairwise_family_long<-
+  winter_archaea_pairwise_family_lfc%>%
+  left_join(
+    p%>%
+      transmute(Family, top_15_Family=Family),
+    by="Family"
+  )%>%
+  replace_na(list("top_15_Family"="Other_Families"))%>%
+  pivot_longer(!c(Family, top_15_Family), names_to = "group", values_to = "lfc_value")
+
+#change group name
+winter_archaea_pairwise_family_long$group[winter_archaea_pairwise_family_long$group == 'lfc_groupheated_0'] <- '0 cm'
+winter_archaea_pairwise_family_long$group[winter_archaea_pairwise_family_long$group == 'lfc_groupheated_1_groupcontrol_1'] <- '1 cm'
+winter_archaea_pairwise_family_long$group[winter_archaea_pairwise_family_long$group == 'lfc_groupheated_8_groupcontrol_8'] <- '8 cm'
+winter_archaea_pairwise_family_long$group[winter_archaea_pairwise_family_long$group == 'lfc_groupheated_15_groupcontrol_15'] <- '15 cm'
+winter_archaea_pairwise_family_long$group[winter_archaea_pairwise_family_long$group == 'lfc_groupheated_22_groupcontrol_22'] <- '22 cm'
+
+#organize order
+winter_archaea_pairwise_family_long$group<- factor(winter_archaea_pairwise_family_long$group,levels=c("0 cm","1 cm","8 cm","15 cm","22 cm"))
+
+#make plot
+heatmap_archaea_winter<-winter_archaea_pairwise_family_long%>%
+  ggplot(aes(x = top_15_Family, y = group, fill = lfc_value)) +
+  geom_tile(color = "black") +
+  scale_fill_gradient2(low = "blue", high = "orange", mid = "white",
+                       na.value = "white", midpoint = 0, limit = c(-6,6),
+                       name = NULL) +
+  labs(x = NULL, y = NULL)+
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))+ggtitle(" Archaea control bay compared to heated bay in winter")+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+scale_y_discrete(limits = rev)
+
+
+```
+#bacteria_summer (family)
+```{r}
+
+asvs_wide_summer_bacteria<-asvs_summer_bacteria %>% 
+  dplyr::select(ASV_ID,sample, count) %>% 
+  spread(sample,count, fill= 0) %>% 
+  remove_rownames() %>% 
+  column_to_rownames(var = "ASV_ID")
+
+OTU= otu_table(asvs_wide_summer_bacteria, taxa_are_rows = TRUE)
+
+
+asvs_tax_df<-as.data.frame(taxonomy_t_summer_bacteria[,1:10])
+rownames(asvs_tax_df)<-NULL
+TAX = tax_table(as.matrix(asvs_tax_df %>% column_to_rownames(., var="ASV_ID")))
+rownames(metadata_summer_bacteria)<-NULL
+SAM = sample_data(metadata_summer_bacteria%>% column_to_rownames(var="sample"))
+
+ps <- phyloseq(OTU, TAX, SAM)
+
+ps@sam_data[["group"]] <- paste(ps@sam_data[["Bay"]], ps@sam_data[["Depth"]], sep="_")
+ps@sam_data[["group"]]
+
+#family level
+
+ancombc2_family_bacteria_summer<-ancombc2(data = ps, tax_level = "Family", fix_formula = "group", group="group", rand_formula=NULL, p_adj_method = "holm", n_cl = 4, prv_cut = 0.10, struc_zero=TRUE, neg_lb=TRUE, global=TRUE, pairwise=TRUE, dunnet=TRUE)
+
+pairwise<-ancombc2_family_bacteria_summer$res_pair
+
+
+#select top 15
+p <- asvs_summer_bacteria %>%
+  inner_join(taxonomy_t_summer_bacteria, by = 'ASV_ID') %>%
+  filter(Kingdom == "Bacteria")%>%
+  group_by(Family, sample) %>%
+  # Calculate the relative abundance of each Family in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each Family over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned Family
+  filter(!is.na(Family))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+
+
+top_15_summer_bacteria<-p$Family
+
+top15_summer_bacteria_pairwise_family<-pairwise[,c("taxon","lfc_groupheated_0","p_groupheated_0","q_groupheated_0",
+                                            "lfc_groupheated_1_groupcontrol_1","p_groupheated_1_groupcontrol_1","q_groupheated_1_groupcontrol_1",
+                                          "lfc_groupheated_8_groupcontrol_8","p_groupheated_8_groupcontrol_8","q_groupheated_8_groupcontrol_8",
+                                          "lfc_groupheated_15_groupcontrol_15","p_groupheated_15_groupcontrol_15","q_groupheated_15_groupcontrol_15",
+                                          "lfc_groupheated_22_groupcontrol_22","p_groupheated_22_groupcontrol_22","q_groupheated_22_groupcontrol_22")]
+
+colnames(top15_summer_bacteria_pairwise_family)[1]<-"Family"
+top15_summer_bacteria_pairwise_family<- top15_summer_bacteria_pairwise_family%>% filter(Family %in% top_15_summer_bacteria)
+
+top15_summer_bacteria_pairwise_family<-top15_summer_bacteria_pairwise_family%>%
+  mutate(across(where(is.numeric), ~ round(., 3)))
+
+
+
+```
+#heatmap summer bacteria
+```{r}
+
+#make heatmap
+summer_bacteria_pairwise_family_lfc<-summer_bacteria_pairwise_family[,c(1,2,5,8,11,14)]
+
+p <- asvs_summer_bacteria %>%
+  inner_join(taxonomy_t_summer_bacteria, by = 'ASV_ID') %>%
+  filter(Kingdom == "Bacteria")%>%
+  group_by(Family, sample) %>%
+  # Calculate the relative abundance of each phylum in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each phylum over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned phylum
+  filter(!is.na(Family))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+summer_bacteria_pairwise_family_long<-
+  summer_bacteria_pairwise_family_lfc%>%
+  left_join(
+    p%>%
+      transmute(Family, top_15_Family=Family),
+    by="Family"
+  )%>%
+  replace_na(list("top_15_Family"="Other_Families"))%>%
+  pivot_longer(!c(Family, top_15_Family), names_to = "group", values_to = "lfc_value")
+
+#change group name
+summer_bacteria_pairwise_family_long$group[summer_bacteria_pairwise_family_long$group == 'lfc_groupheated_0'] <- '0 cm'
+summer_bacteria_pairwise_family_long$group[summer_bacteria_pairwise_family_long$group == 'lfc_groupheated_1_groupcontrol_1'] <- '1 cm'
+summer_bacteria_pairwise_family_long$group[summer_bacteria_pairwise_family_long$group == 'lfc_groupheated_8_groupcontrol_8'] <- '8 cm'
+summer_bacteria_pairwise_family_long$group[summer_bacteria_pairwise_family_long$group == 'lfc_groupheated_15_groupcontrol_15'] <- '15 cm'
+summer_bacteria_pairwise_family_long$group[summer_bacteria_pairwise_family_long$group == 'lfc_groupheated_22_groupcontrol_22'] <- '22 cm'
+
+#organize order
+summer_bacteria_pairwise_family_long$group<- factor(summer_bacteria_pairwise_family_long$group,levels=c("0 cm","1 cm","8 cm","15 cm","22 cm"))
+
+#make plot
+heatmap_bacteria_summer<-summer_bacteria_pairwise_family_long%>%
+  ggplot(aes(x = top_15_Family, y = group, fill = lfc_value)) +
+  geom_tile(color = "black") +
+  scale_fill_gradient2(low = "blue", high = "orange", mid = "white",
+                       na.value = "white", midpoint = 0, limit = c(-6,6),
+                       name = NULL) +
+  labs(x = NULL, y = NULL)+
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))+ggtitle(" bacteria control bay compared to heated bay in summer")+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+scale_y_discrete(limits = rev)
+
+
+```
+#bacteria_winter (family)
+```{r}
+
+asvs_wide_winter_bacteria<-asvs_winter_bacteria %>% 
+  dplyr::select(ASV_ID,sample, count) %>% 
+  spread(sample,count, fill= 0) %>% 
+  remove_rownames() %>% 
+  column_to_rownames(var = "ASV_ID")
+
+OTU= otu_table(asvs_wide_winter_bacteria, taxa_are_rows = TRUE)
+
+
+asvs_tax_df<-as.data.frame(taxonomy_t_winter_bacteria[,1:10])
+rownames(asvs_tax_df)<-NULL
+TAX = tax_table(as.matrix(asvs_tax_df %>% column_to_rownames(., var="ASV_ID")))
+rownames(metadata_winter_bacteria)<-NULL
+SAM = sample_data(metadata_winter_bacteria%>% column_to_rownames(var="sample"))
+
+ps <- phyloseq(OTU, TAX, SAM)
+
+ps@sam_data[["group"]] <- paste(ps@sam_data[["Bay"]], ps@sam_data[["Depth"]], sep="_")
+ps@sam_data[["group"]]
+
+#family level
+
+ancombc2_family_bacteria_winter<-ancombc2(data = ps, tax_level = "Family", fix_formula = "group", group="group", rand_formula=NULL, p_adj_method = "holm", n_cl = 4, prv_cut = 0.10, struc_zero=TRUE, neg_lb=TRUE, global=TRUE, pairwise=TRUE, dunnet=TRUE)
+
+pairwise<-ancombc2_family_bacteria_winter$res_pair
+
+
+#select only top 15 with lfc/p values
+p <- asvs_winter_bacteria %>%
+  inner_join(taxonomy_t_winter_bacteria, by = 'ASV_ID') %>%
+  filter(Kingdom == "Bacteria")%>%
+  group_by(Family, sample) %>%
+  # Calculate the relative abundance of each Family in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each Family over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned Family
+  filter(!is.na(Family))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+
+top_15_winter_bacteria<-p$Family
+
+top15_winter_bacteria_pairwise_family<-pairwise[,c("taxon","lfc_groupheated_0","p_groupheated_0","q_groupheated_0",
+                                            "lfc_groupheated_1_groupcontrol_1","p_groupheated_1_groupcontrol_1","q_groupheated_1_groupcontrol_1",
+                                          "lfc_groupheated_8_groupcontrol_8","p_groupheated_8_groupcontrol_8","q_groupheated_8_groupcontrol_8",
+                                          "lfc_groupheated_15_groupcontrol_15","p_groupheated_15_groupcontrol_15","q_groupheated_15_groupcontrol_15",
+                                          "lfc_groupheated_22_groupcontrol_22","p_groupheated_22_groupcontrol_22","q_groupheated_22_groupcontrol_22")]
+
+colnames(top15_winter_bacteria_pairwise_family)[1]<-"Family"
+
+top15_winter_bacteria_pairwise_family<- top15_winter_bacteria_pairwise_family%>% filter(Family %in% top_15_winter_bacteria)
+
+top15_winter_bacteria_pairwise_family<-top15_winter_bacteria_pairwise_family%>%
+  mutate(across(where(is.numeric), ~ round(., 3)))
+
+
+```
+#heatmap winter bacteria
+```{r}
+
+#make heatmap
+winter_bacteria_pairwise_family_lfc<-winter_bacteria_pairwise_family[,c(1,2,5,8,11,14)]
+
+p <- asvs_winter_bacteria %>%
+  inner_join(taxonomy_t_winter_bacteria, by = 'ASV_ID') %>%
+  filter(Kingdom == "Bacteria")%>%
+  group_by(Family, sample) %>%
+  # Calculate the relative abundance of each phylum in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each phylum over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned phylum
+  filter(!is.na(Family))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+winter_bacteria_pairwise_family_long<-
+  winter_bacteria_pairwise_family_lfc%>%
+  left_join(
+    p%>%
+      transmute(Family, top_15_Family=Family),
+    by="Family"
+  )%>%
+  replace_na(list("top_15_Family"="Other_Families"))%>%
+  pivot_longer(!c(Family, top_15_Family), names_to = "group", values_to = "lfc_value")
+
+#change group name
+winter_bacteria_pairwise_family_long$group[winter_bacteria_pairwise_family_long$group == 'lfc_groupheated_0'] <- '0 cm'
+winter_bacteria_pairwise_family_long$group[winter_bacteria_pairwise_family_long$group == 'lfc_groupheated_1_groupcontrol_1'] <- '1 cm'
+winter_bacteria_pairwise_family_long$group[winter_bacteria_pairwise_family_long$group == 'lfc_groupheated_8_groupcontrol_8'] <- '8 cm'
+winter_bacteria_pairwise_family_long$group[winter_bacteria_pairwise_family_long$group == 'lfc_groupheated_15_groupcontrol_15'] <- '15 cm'
+winter_bacteria_pairwise_family_long$group[winter_bacteria_pairwise_family_long$group == 'lfc_groupheated_22_groupcontrol_22'] <- '22 cm'
+
+#organize order
+winter_bacteria_pairwise_family_long$group<- factor(winter_bacteria_pairwise_family_long$group,levels=c("0 cm","1 cm","8 cm","15 cm","22 cm"))
+
+#make plot
+heatmap_bacteria_winter<-winter_bacteria_pairwise_family_long%>%
+  ggplot(aes(x = top_15_Family, y = group, fill = lfc_value)) +
+  geom_tile(color = "black") +
+  scale_fill_gradient2(low = "blue", high = "orange", mid = "white",
+                       na.value = "white", midpoint = 0, limit = c(-6,6),
+                       name = NULL) +
+  labs(x = NULL, y = NULL)+
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))+ggtitle(" bacteria control bay compared to heated bay in winter")+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+scale_y_discrete(limits = rev)
+
+
+```
+#mix heatmaps for figure 5
+```{r}
+figure5<-ggarrange(heatmap_archaea_winter,
+                       heatmap_bacteria_winter,
+                       heatmap_archaea_summer,
+                       heatmap_bacteria_summer,
+                        ncol=2, nrow=2,
+                       common.legend = TRUE, legend = "right")
+
+```
+
+#Canonical correspondence analysis for figure6
+#archaea community
+```{r}
+## sample metadata
+geometa_archaea_winter<-read_xlsx("archaea_16S/winter_archaea_geochemcial_metadata.xlsx")
+geometa_archaea_summer<-read_xlsx("summer_archaea_geochemical_metadata.xlsx")
+geometa_archaea<-rbind(geometa_archaea_summer,geometa_archaea_winter)
+geometa_archaea$Bay[geometa_archaea$Bay=="warm"]<-"heated"
+
+
+## OTUs data
+otu_mat<- merge(feature_table_t_summer_archaea,feature_table_t_winter_archaea,by = "ASV_ID",
+                                   all = TRUE)
+#replace NA to 0
+otu_mat[is.na(otu_mat)]<-0
+
+otu_mat<-otu_mat %>% remove_rownames %>% column_to_rownames(var="ASV_ID")
+otu_mat_trans<-t(otu_mat)
+
+geometa_archaea_cca<-geometa_archaea%>% remove_rownames %>% column_to_rownames(var="sample")
+
+#fe has one missing values, fix this with average value in this depth
+#Fe2 0.175 fe_total 1.004
+geometa_archaea_cca[58,9]<-0.175
+geometa_archaea_cca[58,10]<-1.004
+
+
+cca_archaea <- cca(otu_mat_trans ~ SO4+NO3+PO4+OM+FE2+Fe_TOTAL, geometa_archaea_cca, scale=TRUE)
+
+#VIF for CCA
+vif.cca_archaea <- vif.cca(cca_archaea) 
+vif.cca_archaea
+
+summary(cca_archaea)
+#Proportion Explained CCA1 0.4724   CCA2 0.2419 
+
+
+##Check significance of env.var. within each bay
+ctrl<-how(nperm=999, blocks=geometa_archaea_cca$Bay)
+set.seed(10)
+anova(cca_archaea, by = "margin",model="direct",permutations = ctrl)
+
+
+
+#Extract site data first
+scrs_archaea <- scores(cca_archaea, display=c("sp","wa","lc","bp","cn"))
+df_sites_archaea<-data.frame(scrs_archaea$sites)
+df_sites_archaea <- cbind(df_sites_archaea,geometa_archaea_cca)
+
+#make depth into character factor
+df_sites_archaea$Depth<-factor(df_sites_archaea$Depth)
+
+
+#make cca plot for bays
+p_archaea_bay<-ggplot()
+p_archaea_bay<-p_archaea_bay+geom_point(data=df_sites_archaea,aes(CCA1,CCA2,colour=Bay,shape=Depth),size=2.5)+
+  scale_color_manual(values=c( "blue","orange"))+
+  theme_bw()+
+  xlab("CCA1 (47.24 %)")+
+  ylab("CCA2 (24.19 %)")
+p_archaea_bay
+
+#Draw biplots
+multiplier_archaea <- vegan:::ordiArrowMul(scrs_archaea$biplot*0.5)
+df_arrows_archaea<- scrs_archaea$biplot*multiplier_archaea
+
+p_archaea_bay<-p_archaea_bay+geom_segment(data=df_arrows_archaea, aes(x = 0, y = 0, xend = CCA1, yend = CCA2),
+                 arrow = arrow(length = unit(0.2, "cm")))
+
+p_archaea_bay<-p_archaea_bay+geom_text(data=as.data.frame(df_arrows_archaea*1.3),aes(CCA1, CCA2, label = rownames(df_arrows_archaea)))
+p_archaea_bay
+
+
+```
+#bacteria community
+```{r}
+## sample metadata
+geometa_bacteria_winter<-read_xlsx("winter_bacteria_geochemical_metadata.xlsx")
+geometa_bacteria_summer<-read_xlsx("summer_bacteria_geochemical_metadata.xlsx")
+geometa_bacteria<-rbind(geometa_bacteria_summer,geometa_bacteria_winter)
+geometa_bacteria$Bay[geometa_bacteria$Bay=="warm"]<-"heated"
+
+
+## OTUs data
+otu_mat<- merge(feature_table_t_summer_bacteria,feature_table_t_winter_bacteria,by = "ASV_ID",
+                                   all = TRUE)
+#replace NA to 0
+otu_mat[is.na(otu_mat)]<-0
+
+otu_mat<-otu_mat %>% remove_rownames %>% column_to_rownames(var="ASV_ID")
+otu_mat_trans<-t(otu_mat)
+
+geometa_bacteria_cca<-geometa_bacteria%>% remove_rownames %>% column_to_rownames(var="sample")
+
+#fe has one missing values, fix this with average value in this depth
+#Fe2 0.175 fe_total 1.004
+geometa_bacteria_cca[48,9]<-0.175
+geometa_bacteria_cca[48,10]<-1.004
+
+
+#cca_bacteria <- cca(otu_mat_trans ~ CH4+SO4+NO3+PO4+OM+FE2+Fe_TOTAL, geometa_bacteria_cca, scale=TRUE)
+cca_bacteria <- cca(otu_mat_trans ~ SO4+NO3+PO4+OM+FE2+Fe_TOTAL, geometa_bacteria_cca, scale=TRUE)
+
+#VIF for CCA
+vif.cca_bacteria <- vif.cca(cca_bacteria) 
+vif.cca_bacteria
+
+summary(cca_bacteria)
+#Proportion Explained CCA1 0.3990   CCA2 0.1822 
+
+##Check significance of env.var. within each bay
+ctrl<-how(nperm=999, blocks=geometa_bacteria_cca$Bay)
+set.seed(10)
+anova(cca_bacteria, by = "margin",model="direct",permutations = ctrl)
+
+
+
+#Extract site data first
+scrs_bacteria <- scores(cca_bacteria, display=c("sp","wa","lc","bp","cn"))
+df_sites_bacteria<-data.frame(scrs_bacteria$sites)
+df_sites_bacteria <- cbind(df_sites_bacteria,geometa_bacteria_cca)
+
+#make depth into character factor
+df_sites_bacteria$Depth<-factor(df_sites_bacteria$Depth)
+
+
+#make cca plot for bays
+p_bacteria_bay<-ggplot()
+p_bacteria_bay<-p_bacteria_bay+geom_point(data=df_sites_bacteria,aes(CCA1,CCA2,colour=Bay,shape=Depth),size=2.5)+
+  scale_color_manual(values=c( "blue","orange"))+
+  theme_bw()+
+  xlab("CCA1 (39.90 %)")+
+  ylab("CCA2 (18.22 %)")
+p_bacteria_bay
+
+```
+#figure 6
+```{r}
+
+figure6<-ggarrange(p_archaea_bay,
+          p_bacteria_bay,
+                    labels = c("A", "B"),
+                    font.label = list(size = 18),
+                    common.legend = TRUE, legend = "right",
+                    ncol=2, nrow=1)
+
+```
+
+#relatieve abundance plot Supplemental Figure S4 for rest taxonomy level
+#phylum level
+# winter archaea Phylum plot
+```{r}
+
+p <- asvs_winter_archaea %>%
+  inner_join(taxonomy_t_winter_archaea, by = 'ASV_ID') %>%
+  filter(Kingdom == "Archaea")%>%
+  group_by(Phylum, sample) %>%
+  # Calculate the relative abundance of each Phylum in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each Phylum over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned Phylum
+  filter(!is.na(Phylum))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+#depth
+depth_Phylum_winter_archaea<-asvs_winter_archaea[,-4]%>% 
+  filter(count > 0)%>%
+  # Add metadata
+ inner_join(metadata_winter_archaea, by = 'sample')%>%
+  inner_join(taxonomy_t_winter_archaea, by = 'ASV_ID')%>%
+  group_by(Bay, Depth)%>%
+  # Calculate the relative abundance of each Phylum in each site
+  mutate(relab = count/sum(count))%>%
+  ungroup()%>% 
+  left_join(
+    p %>% 
+      transmute(Phylum, top_15_Phylum = Phylum),
+    by = 'Phylum'
+  ) %>%
+  replace_na(list('top_15_Phylum' = 'Other_Phylum'))
+
+ra_plot_table<-depth_Phylum_winter_archaea%>%
+  group_by(Bay, Depth,top_15_Phylum)%>%
+  summarise(relab=sum(relab))
+
+ra_plot_table$Bay[ra_plot_table$Bay=="control"]<-"Control winter archaea"
+ra_plot_table$Bay[ra_plot_table$Bay=="heated"]<-"Heated winter archaea"
+
+  
+ra_Phylum_winter_archaea<-ggplot(ra_plot_table,aes(x=Depth, y=relab, fill=top_15_Phylum)) +
+facet_grid(~Bay)+
+geom_col() +
+theme_bw() +
+scale_fill_manual(values = col_vector)+
+scale_x_discrete(limits=rev)+
+coord_flip()+
+labs(x="Sediment depth (cm)",y=element_blank())+
+  theme(legend.position="bottom",
+    legend.key.size = unit(0.5, 'cm'), 
+        legend.key.height = unit(0.5, 'cm'), 
+        legend.key.width = unit(0.7, 'cm'), 
+        legend.title = element_blank(), 
+        legend.text = element_text(size=10),
+    axis.ticks.x = element_line(),  
+        axis.text.x = element_blank()) 
+
+ra_Phylum_winter_archaea
+
+
+
+```
+# winter bacteria Phylum plot
+```{r}
+
+p <- asvs_winter_bacteria %>%
+  inner_join(taxonomy_t_winter_bacteria, by = 'ASV_ID') %>%
+  filter(Kingdom == "Bacteria")%>%
+  group_by(Phylum, sample) %>%
+  # Calculate the relative abundance of each Phylum in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each Phylum over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned Phylum
+  filter(!is.na(Phylum))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+#depth
+depth_Phylum_winter_bacteria<-asvs_winter_bacteria[,-4]%>% 
+  filter(count > 0)%>%
+  # Add metadata
+ inner_join(metadata_winter_bacteria, by = 'sample')%>%
+  inner_join(taxonomy_t_winter_bacteria, by = 'ASV_ID')%>%
+  group_by(Bay, Depth)%>%
+  # Calculate the relative abundance of each Phylum in each site
+  mutate(relab = count/sum(count))%>%
+  ungroup()%>% 
+  left_join(
+    p %>% 
+      transmute(Phylum, top_15_Phylum = Phylum),
+    by = 'Phylum'
+  ) %>%
+  replace_na(list('top_15_Phylum' = 'Other_Phylum'))
+
+ra_plot_table<-depth_Phylum_winter_bacteria%>%
+  group_by(Bay, Depth,top_15_Phylum)%>%
+  summarise(relab=sum(relab))
+
+ra_plot_table$Bay[ra_plot_table$Bay=="control"]<-"Control winter bacteria"
+ra_plot_table$Bay[ra_plot_table$Bay=="heated"]<-"Heated winter bacteria"
+
+  
+ra_Phylum_winter_bacteria<-ggplot(ra_plot_table,aes(x=Depth, y=relab, fill=top_15_Phylum)) +
+facet_grid(~Bay)+
+geom_col() +
+theme_bw() +
+scale_fill_manual(values = col_vector)+
+scale_x_discrete(limits=rev)+
+coord_flip()+
+labs(x="Sediment depth (cm)",y=element_blank())+
+  theme(legend.position="bottom",
+    legend.key.size = unit(0.5, 'cm'), 
+        legend.key.height = unit(0.5, 'cm'), 
+        legend.key.width = unit(0.7, 'cm'), 
+        legend.title = element_blank(), 
+        legend.text = element_text(size=10),
+    axis.ticks.x = element_line(),  
+        axis.text.x = element_blank()) 
+
+ra_Phylum_winter_bacteria
+
+
+
+```
+# summer archaea Phylum plot
+```{r}
+
+p <- asvs_summer_archaea %>%
+  inner_join(taxonomy_t_summer_archaea, by = 'ASV_ID') %>%
+  filter(Kingdom == "Archaea")%>%
+  group_by(Phylum, sample) %>%
+  # Calculate the relative abundance of each Phylum in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each Phylum over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned Phylum
+  filter(!is.na(Phylum))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+#depth
+depth_Phylum_summer_archaea<-asvs_summer_archaea[,-4]%>% 
+  filter(count > 0)%>%
+  # Add metadata
+ inner_join(metadata_summer_archaea, by = 'sample')%>%
+  inner_join(taxonomy_t_summer_archaea, by = 'ASV_ID')%>%
+  group_by(Bay, Depth)%>%
+  # Calculate the relative abundance of each Phylum in each site
+  mutate(relab = count/sum(count))%>%
+  ungroup()%>% 
+  left_join(
+    p %>% 
+      transmute(Phylum, top_15_Phylum = Phylum),
+    by = 'Phylum'
+  ) %>%
+  replace_na(list('top_15_Phylum' = 'Other_Phylum'))
+
+ra_plot_table<-depth_Phylum_summer_archaea%>%
+  group_by(Bay, Depth,top_15_Phylum)%>%
+  summarise(relab=sum(relab))
+
+ra_plot_table$Bay[ra_plot_table$Bay=="control"]<-"Control summer archaea"
+ra_plot_table$Bay[ra_plot_table$Bay=="heated"]<-"Heated summer archaea"
+
+  
+ra_Phylum_summer_archaea<-ggplot(ra_plot_table,aes(x=Depth, y=relab, fill=top_15_Phylum)) +
+facet_grid(~Bay)+
+geom_col() +
+theme_bw() +
+scale_fill_manual(values = col_vector)+
+scale_x_discrete(limits=rev)+
+coord_flip()+
+labs(x="Sediment depth (cm)",y=element_blank())+
+  theme(legend.position="bottom",
+    legend.key.size = unit(0.5, 'cm'), 
+        legend.key.height = unit(0.5, 'cm'), 
+        legend.key.width = unit(0.7, 'cm'), 
+        legend.title = element_blank(), 
+        legend.text = element_text(size=10),
+    axis.ticks.x = element_line(),  
+        axis.text.x = element_blank()) 
+
+
+ra_Phylum_summer_archaea
+
+
+
+```
+# summer bacteria Phylum plot
+```{r}
+
+p <- asvs_summer_bacteria %>%
+  inner_join(taxonomy_t_summer_bacteria, by = 'ASV_ID') %>%
+  filter(Kingdom == "Bacteria")%>%
+  group_by(Phylum, sample) %>%
+  # Calculate the relative abundance of each Phylum in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each Phylum over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned Phylum
+  filter(!is.na(Phylum))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+#depth
+depth_Phylum_summer_bacteria<-asvs_summer_bacteria[,-4]%>% 
+  filter(count > 0)%>%
+  # Add metadata
+ inner_join(metadata_summer_bacteria, by = 'sample')%>%
+  inner_join(taxonomy_t_summer_bacteria, by = 'ASV_ID')%>%
+  group_by(Bay, Depth)%>%
+  # Calculate the relative abundance of each Phylum in each site
+  mutate(relab = count/sum(count))%>%
+  ungroup()%>% 
+  left_join(
+    p %>% 
+      transmute(Phylum, top_15_Phylum = Phylum),
+    by = 'Phylum'
+  ) %>%
+  replace_na(list('top_15_Phylum' = 'Other_Phylum'))
+
+ra_plot_table<-depth_Phylum_summer_bacteria%>%
+  group_by(Bay, Depth,top_15_Phylum)%>%
+  summarise(relab=sum(relab))
+
+ra_plot_table$Bay[ra_plot_table$Bay=="control"]<-"Control summer bacteria"
+ra_plot_table$Bay[ra_plot_table$Bay=="heated"]<-"Heated summer bacteria"
+
+  
+ra_Phylum_summer_bacteria<-ggplot(ra_plot_table,aes(x=Depth, y=relab, fill=top_15_Phylum)) +
+facet_grid(~Bay)+
+geom_col() +
+theme_bw() +
+scale_fill_manual(values = col_vector)+
+scale_x_discrete(limits=rev)+
+coord_flip()+
+labs(x="Sediment depth (cm)",y=element_blank())+
+  theme(legend.position="bottom",
+    legend.key.size = unit(0.5, 'cm'), 
+        legend.key.height = unit(0.5, 'cm'), 
+        legend.key.width = unit(0.7, 'cm'), 
+        legend.title = element_blank(), 
+        legend.text = element_text(size=10)) 
+
+ra_Phylum_summer_bacteria
+
+
+
+```
+# mix plots
+```{r}
+mix_RA_Phylum<-ggarrange(ra_Phylum_winter_archaea,
+          ra_Phylum_winter_bacteria,
+          ra_Phylum_summer_archaea,
+          ra_Phylum_summer_bacteria,
+                    ncol=1, nrow=4)
+mix_RA_Phylum
+
+```
+
+
+#class level
+# winter archaea Class plot
+```{r}
+
+p <- asvs_winter_archaea %>%
+  inner_join(taxonomy_t_winter_archaea, by = 'ASV_ID') %>%
+  filter(Kingdom == "Archaea")%>%
+  group_by(Class, sample) %>%
+  # Calculate the relative abundance of each Class in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each Class over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned Class
+  filter(!is.na(Class))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+#depth
+depth_Class_winter_archaea<-asvs_winter_archaea[,-4]%>% 
+  filter(count > 0)%>%
+  # Add metadata
+ inner_join(metadata_winter_archaea, by = 'sample')%>%
+  inner_join(taxonomy_t_winter_archaea, by = 'ASV_ID')%>%
+  group_by(Bay, Depth)%>%
+  # Calculate the relative abundance of each Class in each site
+  mutate(relab = count/sum(count))%>%
+  ungroup()%>% 
+  left_join(
+    p %>% 
+      transmute(Class, top_15_Class = Class),
+    by = 'Class'
+  ) %>%
+  replace_na(list('top_15_Class' = 'Other_Class'))
+
+ra_plot_table<-depth_Class_winter_archaea%>%
+  group_by(Bay, Depth,top_15_Class)%>%
+  summarise(relab=sum(relab))
+
+ra_plot_table$Bay[ra_plot_table$Bay=="control"]<-"Control winter archaea"
+ra_plot_table$Bay[ra_plot_table$Bay=="heated"]<-"Heated winter archaea"
+
+  
+ra_Class_winter_archaea<-ggplot(ra_plot_table,aes(x=Depth, y=relab, fill=top_15_Class)) +
+facet_grid(~Bay)+
+geom_col() +
+theme_bw() +
+scale_fill_manual(values = col_vector)+
+scale_x_discrete(limits=rev)+
+coord_flip()+
+labs(x="Sediment depth (cm)",y=element_blank())+
+  theme(legend.position="bottom",
+    legend.key.size = unit(0.5, 'cm'), 
+        legend.key.height = unit(0.5, 'cm'), 
+        legend.key.width = unit(0.7, 'cm'), 
+        legend.title = element_blank(), 
+        legend.text = element_text(size=10),
+    axis.ticks.x = element_line(),  
+        axis.text.x = element_blank()) 
+
+ra_Class_winter_archaea
+
+
+
+```
+# winter bacteria Class plot
+```{r}
+
+p <- asvs_winter_bacteria %>%
+  inner_join(taxonomy_t_winter_bacteria, by = 'ASV_ID') %>%
+  filter(Kingdom == "Bacteria")%>%
+  group_by(Class, sample) %>%
+  # Calculate the relative abundance of each Class in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each Class over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned Class
+  filter(!is.na(Class))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+#depth
+depth_Class_winter_bacteria<-asvs_winter_bacteria[,-4]%>% 
+  filter(count > 0)%>%
+  # Add metadata
+ inner_join(metadata_winter_bacteria, by = 'sample')%>%
+  inner_join(taxonomy_t_winter_bacteria, by = 'ASV_ID')%>%
+  group_by(Bay, Depth)%>%
+  # Calculate the relative abundance of each Class in each site
+  mutate(relab = count/sum(count))%>%
+  ungroup()%>% 
+  left_join(
+    p %>% 
+      transmute(Class, top_15_Class = Class),
+    by = 'Class'
+  ) %>%
+  replace_na(list('top_15_Class' = 'Other_Class'))
+
+ra_plot_table<-depth_Class_winter_bacteria%>%
+  group_by(Bay, Depth,top_15_Class)%>%
+  summarise(relab=sum(relab))
+
+ra_plot_table$Bay[ra_plot_table$Bay=="control"]<-"Control winter bacteria"
+ra_plot_table$Bay[ra_plot_table$Bay=="heated"]<-"Heated winter bacteria"
+
+  
+ra_Class_winter_bacteria<-ggplot(ra_plot_table,aes(x=Depth, y=relab, fill=top_15_Class)) +
+facet_grid(~Bay)+
+geom_col() +
+theme_bw() +
+scale_fill_manual(values = col_vector)+
+scale_x_discrete(limits=rev)+
+coord_flip()+
+labs(x="Sediment depth (cm)",y=element_blank())+
+  theme(legend.position="bottom",
+    legend.key.size = unit(0.5, 'cm'), 
+        legend.key.height = unit(0.5, 'cm'), 
+        legend.key.width = unit(0.7, 'cm'), 
+        legend.title = element_blank(), 
+        legend.text = element_text(size=10),
+    axis.ticks.x = element_line(),  
+        axis.text.x = element_blank()) 
+
+ra_Class_winter_bacteria
+
+
+
+```
+# summer archaea Class plot
+```{r}
+
+p <- asvs_summer_archaea %>%
+  inner_join(taxonomy_t_summer_archaea, by = 'ASV_ID') %>%
+  filter(Kingdom == "Archaea")%>%
+  group_by(Class, sample) %>%
+  # Calculate the relative abundance of each Class in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each Class over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned Class
+  filter(!is.na(Class))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+#depth
+depth_Class_summer_archaea<-asvs_summer_archaea[,-4]%>% 
+  filter(count > 0)%>%
+  # Add metadata
+ inner_join(metadata_summer_archaea, by = 'sample')%>%
+  inner_join(taxonomy_t_summer_archaea, by = 'ASV_ID')%>%
+  group_by(Bay, Depth)%>%
+  # Calculate the relative abundance of each Class in each site
+  mutate(relab = count/sum(count))%>%
+  ungroup()%>% 
+  left_join(
+    p %>% 
+      transmute(Class, top_15_Class = Class),
+    by = 'Class'
+  ) %>%
+  replace_na(list('top_15_Class' = 'Other_Class'))
+
+ra_plot_table<-depth_Class_summer_archaea%>%
+  group_by(Bay, Depth,top_15_Class)%>%
+  summarise(relab=sum(relab))
+
+ra_plot_table$Bay[ra_plot_table$Bay=="control"]<-"Control summer archaea"
+ra_plot_table$Bay[ra_plot_table$Bay=="heated"]<-"Heated summer archaea"
+
+  
+ra_Class_summer_archaea<-ggplot(ra_plot_table,aes(x=Depth, y=relab, fill=top_15_Class)) +
+facet_grid(~Bay)+
+geom_col() +
+theme_bw() +
+scale_fill_manual(values = col_vector)+
+scale_x_discrete(limits=rev)+
+coord_flip()+
+labs(x="Sediment depth (cm)",y=element_blank())+
+  theme(legend.position="bottom",
+    legend.key.size = unit(0.5, 'cm'), 
+        legend.key.height = unit(0.5, 'cm'), 
+        legend.key.width = unit(0.7, 'cm'), 
+        legend.title = element_blank(), 
+        legend.text = element_text(size=10),
+    axis.ticks.x = element_line(),  
+        axis.text.x = element_blank()) 
+
+ra_Class_summer_archaea
+
+
+
+```
+# summer bacteria Class plot
+```{r}
+
+p <- asvs_summer_bacteria %>%
+  inner_join(taxonomy_t_summer_bacteria, by = 'ASV_ID') %>%
+  filter(Kingdom == "Bacteria")%>%
+  group_by(Class, sample) %>%
+  # Calculate the relative abundance of each Class in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each Class over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned Class
+  filter(!is.na(Class))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+#depth
+depth_Class_summer_bacteria<-asvs_summer_bacteria[,-4]%>% 
+  filter(count > 0)%>%
+  # Add metadata
+ inner_join(metadata_summer_bacteria, by = 'sample')%>%
+  inner_join(taxonomy_t_summer_bacteria, by = 'ASV_ID')%>%
+  group_by(Bay, Depth)%>%
+  # Calculate the relative abundance of each Class in each site
+  mutate(relab = count/sum(count))%>%
+  ungroup()%>% 
+  left_join(
+    p %>% 
+      transmute(Class, top_15_Class = Class),
+    by = 'Class'
+  ) %>%
+  replace_na(list('top_15_Class' = 'Other_Class'))
+
+ra_plot_table<-depth_Class_summer_bacteria%>%
+  group_by(Bay, Depth,top_15_Class)%>%
+  summarise(relab=sum(relab))
+
+ra_plot_table$Bay[ra_plot_table$Bay=="control"]<-"Control summer bacteria"
+ra_plot_table$Bay[ra_plot_table$Bay=="heated"]<-"Heated summer bacteria"
+
+  
+ra_Class_summer_bacteria<-ggplot(ra_plot_table,aes(x=Depth, y=relab, fill=top_15_Class)) +
+facet_grid(~Bay)+
+geom_col() +
+theme_bw() +
+scale_fill_manual(values = col_vector)+
+scale_x_discrete(limits=rev)+
+coord_flip()+
+labs(x="Sediment depth (cm)",y="Relative abundance")+
+  theme(legend.position="bottom",
+    legend.key.size = unit(0.5, 'cm'), 
+        legend.key.height = unit(0.5, 'cm'), 
+        legend.key.width = unit(0.7, 'cm'), 
+        legend.title = element_blank(), 
+        legend.text = element_text(size=10)) 
+
+ra_Class_summer_bacteria
+
+
+
+```
+# mix plots
+```{r}
+mix_RA_Class<-ggarrange(ra_Class_winter_archaea,
+          ra_Class_winter_bacteria,
+          ra_Class_summer_archaea,
+          ra_Class_summer_bacteria,
+                    ncol=1, nrow=4)
+mix_RA_Class
+
+```
+
+
+#Order level
+# winter archaea Order plot
+```{r}
+
+p <- asvs_winter_archaea %>%
+  inner_join(taxonomy_t_winter_archaea, by = 'ASV_ID') %>%
+  filter(Kingdom == "Archaea")%>%
+  group_by(Order, sample) %>%
+  # Calculate the relative abundance of each Order in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each Order over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned Order
+  filter(!is.na(Order))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+#depth
+depth_Order_winter_archaea<-asvs_winter_archaea[,-4]%>% 
+  filter(count > 0)%>%
+  # Add metadata
+ inner_join(metadata_winter_archaea, by = 'sample')%>%
+  inner_join(taxonomy_t_winter_archaea, by = 'ASV_ID')%>%
+  group_by(Bay, Depth)%>%
+  # Calculate the relative abundance of each Order in each site
+  mutate(relab = count/sum(count))%>%
+  ungroup()%>% 
+  left_join(
+    p %>% 
+      transmute(Order, top_15_Order = Order),
+    by = 'Order'
+  ) %>%
+  replace_na(list('top_15_Order' = 'Other_Order'))
+
+ra_plot_table<-depth_Order_winter_archaea%>%
+  group_by(Bay, Depth,top_15_Order)%>%
+  summarise(relab=sum(relab))
+
+ra_plot_table$Bay[ra_plot_table$Bay=="control"]<-"Control winter archaea"
+ra_plot_table$Bay[ra_plot_table$Bay=="heated"]<-"Heated winter archaea"
+
+  
+ra_Order_winter_archaea<-ggplot(ra_plot_table,aes(x=Depth, y=relab, fill=top_15_Order)) +
+facet_grid(~Bay)+
+geom_col() +
+theme_bw() +
+scale_fill_manual(values = col_vector)+
+scale_x_discrete(limits=rev)+
+coord_flip()+
+labs(x="Sediment depth (cm)",y=element_blank())+
+  theme(legend.position="bottom",
+    legend.key.size = unit(0.5, 'cm'), 
+        legend.key.height = unit(0.5, 'cm'), 
+        legend.key.width = unit(0.7, 'cm'), 
+        legend.title = element_blank(), 
+        legend.text = element_text(size=10),
+    axis.ticks.x = element_line(),  
+        axis.text.x = element_blank()) 
+
+ra_Order_winter_archaea
+
+
+
+```
+# winter bacteria Order plot
+```{r}
+
+p <- asvs_winter_bacteria %>%
+  inner_join(taxonomy_t_winter_bacteria, by = 'ASV_ID') %>%
+  filter(Kingdom == "Bacteria")%>%
+  group_by(Order, sample) %>%
+  # Calculate the relative abundance of each Order in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each Order over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned Order
+  filter(!is.na(Order))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+#depth
+depth_Order_winter_bacteria<-asvs_winter_bacteria[,-4]%>% 
+  filter(count > 0)%>%
+  # Add metadata
+ inner_join(metadata_winter_bacteria, by = 'sample')%>%
+  inner_join(taxonomy_t_winter_bacteria, by = 'ASV_ID')%>%
+  group_by(Bay, Depth)%>%
+  # Calculate the relative abundance of each Order in each site
+  mutate(relab = count/sum(count))%>%
+  ungroup()%>% 
+  left_join(
+    p %>% 
+      transmute(Order, top_15_Order = Order),
+    by = 'Order'
+  ) %>%
+  replace_na(list('top_15_Order' = 'Other_Order'))
+
+ra_plot_table<-depth_Order_winter_bacteria%>%
+  group_by(Bay, Depth,top_15_Order)%>%
+  summarise(relab=sum(relab))
+
+ra_plot_table$Bay[ra_plot_table$Bay=="control"]<-"Control winter bacteria"
+ra_plot_table$Bay[ra_plot_table$Bay=="heated"]<-"Heated winter bacteria"
+
+  
+ra_Order_winter_bacteria<-ggplot(ra_plot_table,aes(x=Depth, y=relab, fill=top_15_Order)) +
+facet_grid(~Bay)+
+geom_col() +
+theme_bw() +
+scale_fill_manual(values = col_vector)+
+scale_x_discrete(limits=rev)+
+coord_flip()+
+labs(x="Sediment depth (cm)",y=element_blank())+
+  theme(legend.position="bottom",
+    legend.key.size = unit(0.5, 'cm'), 
+        legend.key.height = unit(0.5, 'cm'), 
+        legend.key.width = unit(0.7, 'cm'), 
+        legend.title = element_blank(), 
+        legend.text = element_text(size=10),
+    axis.ticks.x = element_line(),  
+        axis.text.x = element_blank()) 
+
+ra_Order_winter_bacteria
+
+
+
+```
+# summer archaea Order plot
+```{r}
+
+p <- asvs_summer_archaea %>%
+  inner_join(taxonomy_t_summer_archaea, by = 'ASV_ID') %>%
+  filter(Kingdom == "Archaea")%>%
+  group_by(Order, sample) %>%
+  # Calculate the relative abundance of each Order in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each Order over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned Order
+  filter(!is.na(Order))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+#depth
+depth_Order_summer_archaea<-asvs_summer_archaea[,-4]%>% 
+  filter(count > 0)%>%
+  # Add metadata
+ inner_join(metadata_summer_archaea, by = 'sample')%>%
+  inner_join(taxonomy_t_summer_archaea, by = 'ASV_ID')%>%
+  group_by(Bay, Depth)%>%
+  # Calculate the relative abundance of each Order in each site
+  mutate(relab = count/sum(count))%>%
+  ungroup()%>% 
+  left_join(
+    p %>% 
+      transmute(Order, top_15_Order = Order),
+    by = 'Order'
+  ) %>%
+  replace_na(list('top_15_Order' = 'Other_Order'))
+
+ra_plot_table<-depth_Order_summer_archaea%>%
+  group_by(Bay, Depth,top_15_Order)%>%
+  summarise(relab=sum(relab))
+
+ra_plot_table$Bay[ra_plot_table$Bay=="control"]<-"Control summer archaea"
+ra_plot_table$Bay[ra_plot_table$Bay=="heated"]<-"Heated summer archaea"
+
+  
+ra_Order_summer_archaea<-ggplot(ra_plot_table,aes(x=Depth, y=relab, fill=top_15_Order)) +
+facet_grid(~Bay)+
+geom_col() +
+theme_bw() +
+scale_fill_manual(values = col_vector)+
+scale_x_discrete(limits=rev)+
+coord_flip()+
+labs(x="Sediment depth (cm)",y=element_blank())+
+  theme(legend.position="bottom",
+    legend.key.size = unit(0.5, 'cm'), 
+        legend.key.height = unit(0.5, 'cm'), 
+        legend.key.width = unit(0.7, 'cm'), 
+        legend.title = element_blank(), 
+        legend.text = element_text(size=10),
+    axis.ticks.x = element_line(),  
+        axis.text.x = element_blank()) 
+
+ra_Order_summer_archaea
+
+
+
+```
+# summer bacteria Order plot
+```{r}
+
+p <- asvs_summer_bacteria %>%
+  inner_join(taxonomy_t_summer_bacteria, by = 'ASV_ID') %>%
+  filter(Kingdom == "Bacteria")%>%
+  group_by(Order, sample) %>%
+  # Calculate the relative abundance of each Order in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each Order over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned Order
+  filter(!is.na(Order))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+#depth
+depth_Order_summer_bacteria<-asvs_summer_bacteria[,-4]%>% 
+  filter(count > 0)%>%
+  # Add metadata
+ inner_join(metadata_summer_bacteria, by = 'sample')%>%
+  inner_join(taxonomy_t_summer_bacteria, by = 'ASV_ID')%>%
+  group_by(Bay, Depth)%>%
+  # Calculate the relative abundance of each Order in each site
+  mutate(relab = count/sum(count))%>%
+  ungroup()%>% 
+  left_join(
+    p %>% 
+      transmute(Order, top_15_Order = Order),
+    by = 'Order'
+  ) %>%
+  replace_na(list('top_15_Order' = 'Other_Order'))
+
+ra_plot_table<-depth_Order_summer_bacteria%>%
+  group_by(Bay, Depth,top_15_Order)%>%
+  summarise(relab=sum(relab))
+
+ra_plot_table$Bay[ra_plot_table$Bay=="control"]<-"Control summer bacteria"
+ra_plot_table$Bay[ra_plot_table$Bay=="heated"]<-"Heated summer bacteria"
+
+  
+ra_Order_summer_bacteria<-ggplot(ra_plot_table,aes(x=Depth, y=relab, fill=top_15_Order)) +
+facet_grid(~Bay)+
+geom_col() +
+theme_bw() +
+scale_fill_manual(values = col_vector)+
+scale_x_discrete(limits=rev)+
+coord_flip()+
+labs(x="Sediment depth (cm)",y="Relative abundance")+
+  theme(legend.position="bottom",
+    legend.key.size = unit(0.5, 'cm'), 
+        legend.key.height = unit(0.5, 'cm'), 
+        legend.key.width = unit(0.7, 'cm'), 
+        legend.title = element_blank(), 
+        legend.text = element_text(size=10)) 
+
+ra_Order_summer_bacteria
+
+
+
+```
+# mix plots
+```{r}
+mix_RA_Order<-ggarrange(ra_Order_winter_archaea,
+          ra_Order_winter_bacteria,
+          ra_Order_summer_archaea,
+          ra_Order_summer_bacteria,
+                    ncol=1, nrow=4)
+mix_RA_Order
+
+```
+
+#Genus level
+# winter archaea Genus plot
+```{r}
+
+p <- asvs_winter_archaea %>%
+  inner_join(taxonomy_t_winter_archaea, by = 'ASV_ID') %>%
+  filter(Kingdom == "Archaea")%>%
+  group_by(Genus, sample) %>%
+  # Calculate the relative abundance of each Genus in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each Genus over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned Genus
+  filter(!is.na(Genus))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+#depth
+depth_Genus_winter_archaea<-asvs_winter_archaea[,-4]%>% 
+  filter(count > 0)%>%
+  # Add metadata
+ inner_join(metadata_winter_archaea, by = 'sample')%>%
+  inner_join(taxonomy_t_winter_archaea, by = 'ASV_ID')%>%
+  group_by(Bay, Depth)%>%
+  # Calculate the relative abundance of each Genus in each site
+  mutate(relab = count/sum(count))%>%
+  ungroup()%>% 
+  left_join(
+    p %>% 
+      transmute(Genus, top_15_Genus = Genus),
+    by = 'Genus'
+  ) %>%
+  replace_na(list('top_15_Genus' = 'Other_Genus'))
+
+ra_plot_table<-depth_Genus_winter_archaea%>%
+  group_by(Bay, Depth,top_15_Genus)%>%
+  summarise(relab=sum(relab))
+
+ra_plot_table$Bay[ra_plot_table$Bay=="control"]<-"Control winter archaea"
+ra_plot_table$Bay[ra_plot_table$Bay=="heated"]<-"Heated winter archaea"
+
+  
+ra_Genus_winter_archaea<-ggplot(ra_plot_table,aes(x=Depth, y=relab, fill=top_15_Genus)) +
+facet_grid(~Bay)+
+geom_col() +
+theme_bw() +
+scale_fill_manual(values = col_vector)+
+scale_x_discrete(limits=rev)+
+coord_flip()+
+labs(x="Sediment depth (cm)",y=element_blank())+
+  theme(legend.position="bottom",
+    legend.key.size = unit(0.5, 'cm'), 
+        legend.key.height = unit(0.5, 'cm'), 
+        legend.key.width = unit(0.7, 'cm'), 
+        legend.title = element_blank(), 
+        legend.text = element_text(size=10),
+    axis.ticks.x = element_line(),  
+        axis.text.x = element_blank()) 
+
+ra_Genus_winter_archaea
+
+
+
+```
+# winter bacteria Genus plot
+```{r}
+
+p <- asvs_winter_bacteria %>%
+  inner_join(taxonomy_t_winter_bacteria, by = 'ASV_ID') %>%
+  filter(Kingdom == "Bacteria")%>%
+  group_by(Genus, sample) %>%
+  # Calculate the relative abundance of each Genus in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each Genus over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned Genus
+  filter(!is.na(Genus))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+#depth
+depth_Genus_winter_bacteria<-asvs_winter_bacteria[,-4]%>% 
+  filter(count > 0)%>%
+  # Add metadata
+ inner_join(metadata_winter_bacteria, by = 'sample')%>%
+  inner_join(taxonomy_t_winter_bacteria, by = 'ASV_ID')%>%
+  group_by(Bay, Depth)%>%
+  # Calculate the relative abundance of each Genus in each site
+  mutate(relab = count/sum(count))%>%
+  ungroup()%>% 
+  left_join(
+    p %>% 
+      transmute(Genus, top_15_Genus = Genus),
+    by = 'Genus'
+  ) %>%
+  replace_na(list('top_15_Genus' = 'Other_Genus'))
+
+ra_plot_table<-depth_Genus_winter_bacteria%>%
+  group_by(Bay, Depth,top_15_Genus)%>%
+  summarise(relab=sum(relab))
+
+ra_plot_table$Bay[ra_plot_table$Bay=="control"]<-"Control winter bacteria"
+ra_plot_table$Bay[ra_plot_table$Bay=="heated"]<-"Heated winter bacteria"
+
+  
+ra_Genus_winter_bacteria<-ggplot(ra_plot_table,aes(x=Depth, y=relab, fill=top_15_Genus)) +
+facet_grid(~Bay)+
+geom_col() +
+theme_bw() +
+scale_fill_manual(values = col_vector)+
+scale_x_discrete(limits=rev)+
+coord_flip()+
+labs(x="Sediment depth (cm)",y=element_blank())+
+  theme(legend.position="bottom",
+    legend.key.size = unit(0.5, 'cm'), 
+        legend.key.height = unit(0.5, 'cm'), 
+        legend.key.width = unit(0.7, 'cm'), 
+        legend.title = element_blank(), 
+        legend.text = element_text(size=10),
+    axis.ticks.x = element_line(),  
+        axis.text.x = element_blank()) 
+
+ra_Genus_winter_bacteria
+
+
+
+```
+# summer archaea Genus plot
+```{r}
+
+p <- asvs_summer_archaea %>%
+  inner_join(taxonomy_t_summer_archaea, by = 'ASV_ID') %>%
+  filter(Kingdom == "Archaea")%>%
+  group_by(Genus, sample) %>%
+  # Calculate the relative abundance of each Genus in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each Genus over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned Genus
+  filter(!is.na(Genus))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+#depth
+depth_Genus_summer_archaea<-asvs_summer_archaea[,-4]%>% 
+  filter(count > 0)%>%
+  # Add metadata
+ inner_join(metadata_summer_archaea, by = 'sample')%>%
+  inner_join(taxonomy_t_summer_archaea, by = 'ASV_ID')%>%
+  group_by(Bay, Depth)%>%
+  # Calculate the relative abundance of each Genus in each site
+  mutate(relab = count/sum(count))%>%
+  ungroup()%>% 
+  left_join(
+    p %>% 
+      transmute(Genus, top_15_Genus = Genus),
+    by = 'Genus'
+  ) %>%
+  replace_na(list('top_15_Genus' = 'Other_Genus'))
+
+ra_plot_table<-depth_Genus_summer_archaea%>%
+  group_by(Bay, Depth,top_15_Genus)%>%
+  summarise(relab=sum(relab))
+
+ra_plot_table$Bay[ra_plot_table$Bay=="control"]<-"Control summer archaea"
+ra_plot_table$Bay[ra_plot_table$Bay=="heated"]<-"Heated summer archaea"
+
+  
+ra_Genus_summer_archaea<-ggplot(ra_plot_table,aes(x=Depth, y=relab, fill=top_15_Genus)) +
+facet_grid(~Bay)+
+geom_col() +
+theme_bw() +
+scale_fill_manual(values = col_vector)+
+scale_x_discrete(limits=rev)+
+coord_flip()+
+labs(x="Sediment depth (cm)",y=element_blank())+
+  theme(legend.position="bottom",
+    legend.key.size = unit(0.5, 'cm'), 
+        legend.key.height = unit(0.5, 'cm'), 
+        legend.key.width = unit(0.7, 'cm'), 
+        legend.title = element_blank(), 
+        legend.text = element_text(size=10),
+    axis.ticks.x = element_line(),  
+        axis.text.x = element_blank()) 
+
+ra_Genus_summer_archaea
+
+
+
+```
+# summer bacteria Genus plot
+```{r}
+
+p <- asvs_summer_bacteria %>%
+  inner_join(taxonomy_t_summer_bacteria, by = 'ASV_ID') %>%
+  filter(Kingdom == "Bacteria")%>%
+  group_by(Genus, sample) %>%
+  # Calculate the relative abundance of each Genus in each sample
+  summarise(relab = sum(relab)) %>%
+  # Calculate the *mean* relative abundance of each Genus over the samples
+  summarise(mean_relab = sum(relab)) %>%
+  ungroup() %>%
+  # Filter out non-assigned Genus
+  filter(!is.na(Genus))%>%
+  # Select the top 15
+  top_n(15, mean_relab)
+
+#depth
+depth_Genus_summer_bacteria<-asvs_summer_bacteria[,-4]%>% 
+  filter(count > 0)%>%
+  # Add metadata
+ inner_join(metadata_summer_bacteria, by = 'sample')%>%
+  inner_join(taxonomy_t_summer_bacteria, by = 'ASV_ID')%>%
+  group_by(Bay, Depth)%>%
+  # Calculate the relative abundance of each Genus in each site
+  mutate(relab = count/sum(count))%>%
+  ungroup()%>% 
+  left_join(
+    p %>% 
+      transmute(Genus, top_15_Genus = Genus),
+    by = 'Genus'
+  ) %>%
+  replace_na(list('top_15_Genus' = 'Other_Genus'))
+
+ra_plot_table<-depth_Genus_summer_bacteria%>%
+  group_by(Bay, Depth,top_15_Genus)%>%
+  summarise(relab=sum(relab))
+
+ra_plot_table$Bay[ra_plot_table$Bay=="control"]<-"Control summer bacteria"
+ra_plot_table$Bay[ra_plot_table$Bay=="heated"]<-"Heated summer bacteria"
+
+  
+ra_Genus_summer_bacteria<-ggplot(ra_plot_table,aes(x=Depth, y=relab, fill=top_15_Genus)) +
+facet_grid(~Bay)+
+geom_col() +
+theme_bw() +
+scale_fill_manual(values = col_vector)+
+scale_x_discrete(limits=rev)+
+coord_flip()+
+labs(x="Sediment depth (cm)",y="Relative abundance")+
+  theme(legend.position="bottom",
+    legend.key.size = unit(0.5, 'cm'), 
+        legend.key.height = unit(0.5, 'cm'), 
+        legend.key.width = unit(0.7, 'cm'), 
+        legend.title = element_blank(), 
+        legend.text = element_text(size=10)) 
+
+ra_Genus_summer_bacteria
+
+
+
+```
+# mix plots
+```{r}
+mix_RA_Genus<-ggarrange(ra_Genus_winter_archaea,
+          ra_Genus_winter_bacteria,
+          ra_Genus_summer_archaea,
+          ra_Genus_summer_bacteria,
+                    ncol=1, nrow=4)
+mix_RA_Genus
+
+```
+
+
+
